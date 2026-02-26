@@ -1,13 +1,11 @@
-import 
-
-osBOT_TOKEN = os.getenv("TOKEN")
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔥 Mines Ultra Pro Bot is running!")
+    await update.message.reply_text("Bot actif 🚀")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
