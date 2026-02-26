@@ -1,223 +1,149 @@
-import os
 import random
-import hashlib
-import sqlite3
-import time
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-)
+# ================= MENU =================
 
-TOKEN = os.getenv("TOKEN")  # Mets ton token Telegram
-
-# ================= DATABASE =================
-
-conn = sqlite3.connect("mines.db", check_same_thread=False)
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    score INTEGER DEFAULT 0
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    gain INTEGER,
-    timestamp INTEGER
-)
-""")
-
-conn.commit()
-
-# ================= UTILITIES =================
-
-def get_user(user_id):
-    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    user = cursor.fetchone()
-    if not user:
-        cursor.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-
-def generate_board_from_seed(server_seed, client_seed, nonce):
-    combined = f"{server_seed}:{client_seed}:{nonce}"
-    hash_result = hashlib.sha256(combined.encode()).hexdigest()
-
-    random.seed(hash_result)
-    mines = random.sample(range(25), 3)
-
-    return mines, hash_result
-
-def calculate_multiplier(revealed):
-    base = 1.07
-    return round(base ** revealed, 2)
-
-def build_grid():
-    keyboard = []
-    for i in range(5):
-        row = []
-        for j in range(5):
-            index = i * 5 + j
-            row.append(
-                InlineKeyboardButton("⬜", callback_data=f"cell_{index}")
-            )
-        keyboard.append(row)
-    return InlineKeyboardMarkup(keyboard)
-
-# ================= COMMANDS =================
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    get_user(user_id)
-
+async def start(update, context):
     keyboard = [
-        [InlineKeyboardButton("🎮 Jouer", callback_data="play")],
-        [InlineKeyboardButton("🔐 Provably Fair", callback_data="provably")],
-        [InlineKeyboardButton("🧮 Vérifier Hash", callback_data="verify")],
-        [InlineKeyboardButton("📈 Historique", callback_data="history")]
+        [InlineKeyboardButton("💣 Mines", callback_data="mines")],
+        [InlineKeyboardButton("⚽ Penalty", callback_data="penalty")],
+        [InlineKeyboardButton("🔥 Cross Fire Chicken", callback_data="crossfire")],
+        [InlineKeyboardButton("🎲 Play Me", callback_data="playme")],
     ]
 
     await update.message.reply_text(
-        "💎 MINES SIMULATION BOT 💎\n\n"
-        "Choisis une option :",
+        "🎮 MULTI GAME SIMULATION\n\nChoisis ton jeu :",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ================= BUTTON HANDLER =================
+# ================= MINES =================
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    get_user(user_id)
+async def mines_game(query):
+    mine_position = random.randint(1, 5)
+    choice = random.randint(1, 5)
 
-    # PLAY
-    if query.data == "play":
-        server_seed = str(random.random())
-        client_seed = str(user_id)
-        nonce = int(time.time())
+    if choice == mine_position:
+        return "💥 Mine touchée !"
+    else:
+        return "✅ Safe !"
 
-        mines, hash_result = generate_board_from_seed(server_seed, client_seed, nonce)
+# ================= PENALTY =================
 
-        context.user_data["mines"] = mines
-        context.user_data["revealed"] = 0
-        context.user_data["server_seed"] = server_seed
-        context.user_data["client_seed"] = client_seed
-        context.user_data["nonce"] = nonce
-        context.user_data["hash"] = hash_result
+async def penalty_game(query):
+    goalkeeper = random.choice(["gauche", "centre", "droite"])
+    player = random.choice(["gauche", "centre", "droite"])
 
-        await query.edit_message_text(
-            "💣 Partie commencée !\n\n"
-            f"Hash (preuve) :\n{hash_result}\n\n"
-            "Choisis une case :",
-            reply_markup=build_grid()
-        )
+    if player == goalkeeper:
+        return "🧤 Arrêt du gardien !"
+    else:
+        return "⚽ BUT !!!"
 
-    # CLICK CELL
-    elif query.data.startswith("cell_"):
-        index = int(query.data.split("_")[1])
-        mines = context.user_data.get("mines", [])
-        revealed = context.user_data.get("revealed", 0)
+# ================= CROSS FIRE =================
 
-        if index in mines:
-            await query.edit_message_text(
-                "💥 BOOM ! Mine touchée.\n\n"
-                "Server Seed révélé :\n"
-                f"{context.user_data['server_seed']}"
-            )
-        else:
-            revealed += 1
-            context.user_data["revealed"] = revealed
+async def crossfire_game(query):
+    hit = random.random()
 
-            multiplier = calculate_multiplier(revealed)
-            gain = int(10 * multiplier)
+    if hit > 0.7:
+        return "🔥 X5 gagné !"
+    elif hit > 0.4:
+        return "🎯 Petit gain"
+    else:
+        return "💣 Perdu"
 
-            cursor.execute(
-                "UPDATE users SET score = score + ? WHERE user_id=?",
-                (gain, user_id)
-            )
-            cursor.execute(
-                "INSERT INTO history (user_id, gain, timestamp) VALUES (?,?,?)",
-                (user_id, gain, int(time.time()))
-            )
-            conn.commit()
+# ================= PLAY ME =================
 
-            await query.edit_message_text(
-                f"✅ Safe !\n"
-                f"💎 Gain : {gain}\n"
-                f"⚡ Multiplicateur : x{multiplier}"
-            )
+async def playme_game(query):
+    result = random.randint(1, 10)
 
-    # PROVABLY FAIR EXPLANATION
-    elif query.data == "provably":
-        await query.edit_message_text(
-            "🔐 PROVABLY FAIR\n\n"
-            "1️⃣ Le serveur génère un Server Seed secret\n"
-            "2️⃣ Le hash SHA256 est affiché\n"
-            "3️⃣ Après la partie, le seed est révélé\n"
-            "4️⃣ Tu peux recalculer le hash pour vérifier"
-        )
+    if result == 10:
+        return "💎 JACKPOT X5000"
+    elif result > 7:
+        return "✨ Gagné"
+    else:
+        return "❌ Perdu"cursor.execute("""
+ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 1000
+""")
 
-    # VERIFY HASH
-    elif query.data == "verify":
-        await query.edit_message_text(
-            "🧮 Pour vérifier un hash :\n\n"
-            "Format :\n"
-            "/check server_seed client_seed nonce hash"
-        )
+cursor.execute("""
+ALTER TABLE users ADD COLUMN tournament_points INTEGER DEFAULT 0
+""")
+conn.commit()elif query.data == "tournament":
 
-    # HISTORY
-    elif query.data == "history":
-        cursor.execute(
-            "SELECT gain FROM history WHERE user_id=? ORDER BY id DESC LIMIT 5",
-            (user_id,)
-        )
-        rows = cursor.fetchall()
+    cursor.execute("SELECT coins FROM users WHERE user_id=?", (user_id,))
+    coins = cursor.fetchone()[0]
 
-        if not rows:
-            await query.edit_message_text("Aucun historique.")
-            return
+    if coins < 100:
+        await query.edit_message_text("❌ Pas assez de pièces.")
+        return
 
-        message = "📈 Derniers gains :\n\n"
-        for i, row in enumerate(rows, 1):
-            message += f"{i}. +{row[0]} pts\n"
+    cursor.execute("""
+        UPDATE users
+        SET coins = coins - 100,
+            tournament_points = tournament_points + 50
+        WHERE user_id=?
+    """, (user_id,))
+    conn.commit()
 
-        await query.edit_message_text(message)
+    await query.edit_message_text(
+        "🏆 Tu as rejoint le tournoi !\n"
+        "🔥 +50 points tournoi"
+    )elif query.data == "tournament_live":
 
-# ================= HASH CHECK COMMAND =================
+    cursor.execute("""
+        SELECT user_id, tournament_points, vip
+        FROM users
+        ORDER BY tournament_points DESC
+        LIMIT 10
+    """)
 
-async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    players = cursor.fetchall()
+
+    if not players:
+        await query.edit_message_text("📊 Aucun joueur pour le moment.")
+        return
+
+    medals = ["🥇", "🥈", "🥉"]
+
+    message = "🏆 CLASSEMENT TOURNOI LIVE 🏆\n\n"
+
+    for i, (uid, points, vip) in enumerate(players):
+        medal = medals[i] if i < 3 else "⭐"
+        badge = " 👑" if vip == 1 else ""
+        message += f"{medal} {uid} — {points} pts{badge}\n"
+
+    await query.edit_message_text(message)🏆 CLASSEMENT TOURNOI LIVE 🏆
+
+🥇 8094967191 — 350 pts 👑
+🥈 123456789 — 280 pts
+🥉 567891234 — 240 pts
+⭐ 987654321 — 150 pts async def refresh_tournament_live(context):
+
+job_data = context.job.data
+    chat_id = job_data["chat_id"]
+    message_id = job_data["message_id"]
+
+    cursor.execute("""
+        SELECT user_id, tournament_points, vip
+        FROM users
+        ORDER BY tournament_points DESC
+        LIMIT 10
+    """)
+
+    players = cursor.fetchall()
+
+    medals = ["🥇", "🥈", "🥉"]
+    message = "🏆 CLASSEMENT TOURNOI LIVE 🏆\n\n"
+
+    for i, (uid, points, vip) in enumerate(players):
+        medal = medals[i] if i < 3 else "⭐"
+        badge = " 👑" if vip == 1 else ""
+        message += f"{medal} {uid} — {points} pts{badge}\n"
+
     try:
-        server_seed = context.args[0]
-        client_seed = context.args[1]
-        nonce = context.args[2]
-        given_hash = context.args[3]
-
-        combined = f"{server_seed}:{client_seed}:{nonce}"
-        calculated = hashlib.sha256(combined.encode()).hexdigest()
-
-        if calculated == given_hash:
-            await update.message.reply_text("✅ Hash valide")
-        else:
-            await update.message.reply_text("❌ Hash invalide")
-
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=message
+        )
     except:
-        await update.message.reply_text("Format incorrect.")
-
-# ================= RUN =================
-
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("check", check))
-    app.add_handler(CallbackQueryHandler(button))
-
-    app.run_polling()
+        pass
