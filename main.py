@@ -1,23 +1,19 @@
+import os
+import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-import random
 
-# 🔐 COLLE TON TOKEN ICI
-TOKEN = "COLLE_TON_TOKEN_ICI"
+# Railway utilise les variables d’environnement
+TOKEN = os.getenv("TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("✈️ Lucky Jet", callback_data="lucky")],
-        [InlineKeyboardButton("🛩 Aviator", callback_data="aviator")],
-        [InlineKeyboardButton("💣 Mines", callback_data="mines")],
-        [InlineKeyboardButton("⚽ Penalty", callback_data="penalty")],
         [InlineKeyboardButton("🪙 CoinFlip", callback_data="coinflip")],
-        [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="apple")],
-        [InlineKeyboardButton("🎡 Roue de la Fortune", callback_data="wheel")]
+        [InlineKeyboardButton("✈️ Lucky Jet", callback_data="lucky")]
     ]
 
     await update.message.reply_text(
-        "🎰 SUPER CASINO PRO MAX\n\nChoisissez votre jeu :",
+        "🎰 CASINO PRO\n\nChoisis un jeu :",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -26,35 +22,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "coinflip":
-        result = random.choice(["🪙 FACE", "🪙 PILE"])
-        await query.edit_message_text(f"Résultat CoinFlip : {result}")
+        result = random.choice(["FACE", "PILE"])
+        await query.edit_message_text(f"Résultat : {result}")
 
     elif query.data == "lucky":
-        crash = round(random.uniform(1.00, 10.00), 2)
-        await query.edit_message_text(f"✈️ Lucky Jet Crash à : {crash}x")
+        crash = round(random.uniform(1.00, 5.00), 2)
+        await query.edit_message_text(f"Lucky crash à {crash}x")
 
-    elif query.data == "aviator":
-        crash = round(random.uniform(1.00, 20.00), 2)
-        await query.edit_message_text(f"🛩 Aviator Crash à : {crash}x")
+def main():
+    if not TOKEN:
+        print("TOKEN manquant !")
+        return
 
-    elif query.data == "penalty":
-        goal = random.choice(["⚽ GOAL !!!", "🧤 Arrêt du gardien"])
-        await query.edit_message_text(goal)
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button))
 
-    elif query.data == "apple":
-        gain = random.choice(["🍎 Gagné 2x", "💣 Bombe ! Perdu"])
-        await query.edit_message_text(gain)
+    print("Bot Railway démarré...")
+    app.run_polling()
 
-    elif query.data == "wheel":
-        prize = random.choice(["💰 100 FCFA", "💎 VIP", "❌ Rien", "🔥 500 FCFA"])
-        await query.edit_message_text(f"🎡 Résat : {prize}")
-
-    elif query.data == "mines":
-        await query.edit_message_text("💣 Mode Mines bientôt disponible...")
-
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(button))
-
-print("Bot démarré...")
-app.run_polling()
+if __name__ == "__main__":
+    main()
