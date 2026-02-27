@@ -1,5 +1,5 @@
- import os
-TOKEN = os.getenv("TOKEN"import sqlite3
+import os
+import sqlite3
 import random
 import time
 import logging
@@ -10,8 +10,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # CONFIGURATION
 # ==============================
 
-TOKEN = "TON_TOKEN_ICI"
-ADMIN_ID = 8094967191   # Mets ton ID Telegram ici
+TOKEN = os.getenv("TOKEN")
+ADMIN_ID = 8094967191
 MAX_GAIN = 10000
 MINES_COUNT = 3
 BET_AMOUNT = 200
@@ -21,7 +21,6 @@ BET_AMOUNT = 200
 # ==============================
 
 logging.basicConfig(
-    filename="bot.log",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -191,8 +190,6 @@ async def start_game(update, context):
         "revealed": []
     }
 
-    logging.info(f"User {user_id} started game")
-
     await query.edit_message_text(
         "🎮 Partie lancée\nClique sur une case",
         reply_markup=generate_grid(games[user_id])
@@ -208,7 +205,6 @@ async def handle_click(update, context):
         return
 
     if is_spamming(user_id):
-        logging.warning(f"Spam detected from {user_id}")
         await query.answer("⏳ Trop rapide !", show_alert=True)
         return
 
@@ -223,7 +219,6 @@ async def handle_click(update, context):
 
         if index in game["mines"]:
             update_stats(user_id, win=False)
-            logging.info(f"User {user_id} lost")
             await query.edit_message_text(
                 "💥 BOOM ! Perdu.",
                 reply_markup=generate_grid(game, reveal_all=True)
@@ -274,8 +269,6 @@ async def handle_click(update, context):
         update_balance(user_id, gain)
         update_stats(user_id, win=True)
 
-        logging.info(f"User {user_id} won {gain}")
-
         del games[user_id]
 
         await query.edit_message_text(f"💰 Cashout réussi\nGain : {gain} FCFA")
@@ -283,6 +276,9 @@ async def handle_click(update, context):
 # ==============================
 # MAIN
 # ==============================
+
+if not TOKEN:
+    raise ValueError("TOKEN manquant dans les variables Railway")
 
 app = ApplicationBuilder().token(TOKEN).build()
 
