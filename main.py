@@ -1,4 +1,5 @@
-import sqlite3
+ import os
+TOKEN = os.getenv("TOKEN"import sqlite3
 import random
 import time
 import logging
