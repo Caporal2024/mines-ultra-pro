@@ -10,7 +10,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # ==============================
 
 TOKEN = "TON_TOKEN_ICI"
-ADMIN_ID = 8094967191  # Mets ton ID Telegram ici
+ADMIN_ID = 8094967191   # Mets ton ID Telegram ici
 MAX_GAIN = 10000
 MINES_COUNT = 3
 BET_AMOUNT = 200
