@@ -1,12 +1,17 @@
-from flask import Flask
 import os
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-app = Flask(__name__)
+TOKEN = os.environ.get("BOT_TOKEN")
 
-@app.route("/")
-def home():
-    return open("playme_pro_max.html").read()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🚀 Mines Ultra Pro Max activé !")
+
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    print("Bot démarré...")
+    app.run_polling()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 3000))
-    app.run(host="0.0.0.0", port=port)
+    main()
