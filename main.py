@@ -1,232 +1,157 @@
-import telebot
-import random
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>PLAY ME PRO MAX</title>
+<style>
+body{
+    background:#0f1116;
+    font-family:Arial;
+    color:white;
+    text-align:center;
+}
+h1{
+    color:#00aaff;
+}
+.grid{
+    display:grid;
+    grid-template-columns:repeat(5,60px);
+    gap:10px;
+    justify-content:center;
+    margin:20px;
+}
+.cell{
+    width:60px;
+    height:60px;
+    background:#2a2d36;
+    border-radius:10px;
+    cursor:pointer;
+}
+.win{
+    background:#0080ff; /* BLEU gagnant */
+}
+.bomb{
+    background:red;
+}
+.controls{
+    margin-top:20px;
+}
+button{
+    padding:10px 20px;
+    margin:5px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+}
+.blue{
+    background:#007bff;
+    color:white;
+}
+.dark{
+    background:#1c1f26;
+    color:white;
+}
+</style>
+</head>
+<body>
 
-TOKEN = "TON_TOKEN_ICI"
-ADMIN_ID = 8094967191
+<h1>🎮 PLAY ME PRO MAX</h1>
+<p>ID Joueur : 8094967191</p>
 
-bot = telebot.TeleBot(TOKEN)
+<h3>💰 Capital : <span id="balance">10000</span> FCFA</h3>
 
-users = {}
+<div>
+Nombre de bombes :
+<button class="dark" onclick="setBombs(2)">2</button>
+<button class="dark" onclick="setBombs(3)">3</button>
+<button class="dark" onclick="setBombs(5)">5</button>
+<button class="dark" onclick="setBombs(7)">7</button>
+</div>
 
-# ==============================
-# INITIALISATION UTILISATEUR
-# ==============================
+<div class="grid" id="grid"></div>
 
-def init_user(user_id):
-    if user_id not in users:
-        users[user_id] = {
-            "balance": 10000.0,
-            "bet": 120.0,
-            "mines": 3,
-            "grid": ["⬛"] * 25,
-            "mines_positions": [],
-            "opened": 0,
-            "multiplier": 1.00
+<div class="controls">
+<input type="number" id="bet" value="500">
+<button class="blue" onclick="startGame()">PARI</button>
+</div>
+
+<hr>
+
+<h2>⚽ Jeu Penalty</h2>
+<p>Choisis une direction :</p>
+<button class="blue" onclick="penalty('left')">Gauche</button>
+<button class="blue" onclick="penalty('center')">Centre</button>
+<button class="blue" onclick="penalty('right')">Droite</button>
+
+<script>
+let bombs = 3;
+let bombPositions = [];
+let balance = 10000;
+let gameActive = false;
+
+function setBombs(n){
+    bombs = n;
+}
+
+function startGame(){
+    gameActive = true;
+    bombPositions = [];
+    document.getElementById("grid").innerHTML="";
+    let bet = parseInt(document.getElementById("bet").value);
+
+    if(bet > balance){
+        alert("Solde insuffisant !");
+        return;
+    }
+
+    balance -= bet;
+    updateBalance();
+
+    while(bombPositions.length < bombs){
+        let r = Math.floor(Math.random()*25);
+        if(!bombPositions.includes(r)){
+            bombPositions.push(r);
         }
+    }
 
-# ==============================
-# MULTIPLICATEUR INTELLIGENT
-# ==============================
+    for(let i=0;i<25;i++){
+        let cell = document.createElement("div");
+        cell.classList.add("cell");
+        cell.onclick = function(){
+            if(!gameActive) return;
 
-def calculate_multiplier(opened, mines):
-    base = 1 + (opened * (0.15 + mines * 0.02))
-    return round(base, 2)
+            if(bombPositions.includes(i)){
+                cell.classList.add("bomb");
+                alert("💣 Perdu !");
+                gameActive=false;
+            }else{
+                cell.classList.add("win");
+                balance += bet * 1.2;
+                updateBalance();
+            }
+        };
+        document.getElementById("grid").appendChild(cell);
+    }
+}
 
-# ==============================
-# MENU PRINCIPAL
-# ==============================
+function updateBalance(){
+    document.getElementById("balance").innerText = balance;
+}
 
-def main_menu():
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("💣 Mines", callback_data="mines"),
-        InlineKeyboardButton("⚽ Penalty", callback_data="penalty")
-    )
-    return markup
+function penalty(choice){
+    let directions = ["left","center","right"];
+    let random = directions[Math.floor(Math.random()*3)];
 
-# ==============================
-# MENU BOMBS
-# ==============================
+    if(choice === random){
+        balance += 1000;
+        alert("⚽ BUT ! +1000 FCFA");
+    }else{
+        balance -= 500;
+        alert("❌ Arrêt du gardien !");
+    }
+    updateBalance();
+}
+</script>
 
-def bombs_menu(selected):
-    markup = InlineKeyboardMarkup()
-    row = []
-    for n in [2,3,5,7]:
-        text = f"⭐ {n}" if n == selected else str(n)
-        row.append(InlineKeyboardButton(text, callback_data=f"bomb_{n}"))
-    markup.row(*row)
-    return markup
-
-# ==============================
-# BOUTONS MISE
-# ==============================
-
-def bet_menu():
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("➖", callback_data="bet_minus"),
-        InlineKeyboardButton("➕", callback_data="bet_plus")
-    )
-    return markup
-
-# ==============================
-# CRÉER GRILLE
-# ==============================
-
-def create_mines(user_id):
-    users[user_id]["grid"] = ["⬛"] * 25
-    users[user_id]["opened"] = 0
-    users[user_id]["multiplier"] = 1.00
-    users[user_id]["mines_positions"] = random.sample(
-        range(25),
-        users[user_id]["mines"]
-    )
-
-def mines_keyboard(user_id):
-    markup = InlineKeyboardMarkup(row_width=5)
-    for i in range(25):
-        markup.insert(
-            InlineKeyboardButton(
-                users[user_id]["grid"][i],
-                callback_data=f"cell_{i}"
-            )
-        )
-    return markup
-
-# ==============================
-# START
-# ==============================
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    user_id = message.from_user.id
-    init_user(user_id)
-
-    bot.send_message(
-        message.chat.id,
-        f"👑 PRO MAX\n"
-        f"🆔 ID: {user_id}\n"
-        f"💰 Bourse: {users[user_id]['balance']:.2f} F\n"
-        f"💵 Mise: {users[user_id]['bet']:.2f} F",
-        reply_markup=main_menu()
-    )
-
-# ==============================
-# CALLBACK
-# ==============================
-
-@bot.callback_query_handler(func=lambda call: True)
-def callback(call):
-    user_id = call.from_user.id
-    init_user(user_id)
-    data = call.data
-
-    # ---- MINES ----
-    if data == "mines":
-        bot.edit_message_text(
-            f"💣 MINES\n"
-            f"💰 Bourse: {users[user_id]['balance']:.2f} F\n"
-            f"💵 Mise: {users[user_id]['bet']:.2f} F\n\n"
-            f"Choisis bombes :",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=bombs_menu(users[user_id]["mines"])
-        )
-
-    elif data.startswith("bomb_"):
-        mines_number = int(data.split("_")[1])
-        users[user_id]["mines"] = mines_number
-        create_mines(user_id)
-
-        bot.edit_message_text(
-            f"💣 Mines: {mines_number}\n"
-            f"💰 {users[user_id]['balance']:.2f} F\n"
-            f"💵 Mise: {users[user_id]['bet']:.2f} F",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=mines_keyboard(user_id)
-        )
-
-    elif data.startswith("cell_"):
-        index = int(data.split("_")[1])
-
-        if index in users[user_id]["mines_positions"]:
-            users[user_id]["grid"][index] = "💣"
-            users[user_id]["balance"] -= users[user_id]["bet"]
-
-            bot.edit_message_text(
-                f"💥 BOOM\n"
-                f"💰 Bourse: {users[user_id]['balance']:.2f} F",
-                call.message.chat.id,
-                call.message.message_id,
-                reply_markup=main_menu()
-            )
-        else:
-            users[user_id]["grid"][index] = "🟦"
-            users[user_id]["opened"] += 1
-            users[user_id]["multiplier"] = calculate_multiplier(
-                users[user_id]["opened"],
-                users[user_id]["mines"]
-            )
-
-            gain = users[user_id]["bet"] * users[user_id]["multiplier"]
-            users[user_id]["balance"] += gain * 0.1
-
-            bot.edit_message_text(
-                f"🟦 SAFE\n"
-                f"📈 Multiplicateur: x{users[user_id]['multiplier']}\n"
-                f"💰 Bourse: {users[user_id]['balance']:.2f} F",
-                call.message.chat.id,
-                call.message.message_id,
-                reply_markup=mines_keyboard(user_id)
-            )
-
-    # ---- MODIFIER MISE ----
-    elif data == "bet_plus":
-        users[user_id]["bet"] += 20
-
-    elif data == "bet_minus":
-        if users[user_id]["bet"] > 20:
-            users[user_id]["bet"] -= 20
-
-    # ---- PENALTY ----
-    elif data == "penalty":
-        markup = InlineKeyboardMarkup()
-        markup.row(
-            InlineKeyboardButton("⬅️", callback_data="shot_left"),
-            InlineKeyboardButton("⬆️", callback_data="shot_center"),
-            InlineKeyboardButton("➡️", callback_data="shot_right")
-        )
-
-        bot.edit_message_text(
-            f"⚽ PENALTY\n"
-            f"💰 Bourse: {users[user_id]['balance']:.2f} F\n"
-            f"💵 Mise: {users[user_id]['bet']:.2f} F",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup
-        )
-
-    elif data.startswith("shot_"):
-        directions = ["left","center","right"]
-        bot_choice = random.choice(directions)
-        player = data.split("_")[1]
-
-        if player == bot_choice:
-            users[user_id]["balance"] -= users[user_id]["bet"]
-            result = "❌ Arrêt"
-        else:
-            users[user_id]["balance"] += users[user_id]["bet"]
-            result = "⚽ BUT"
-
-        bot.edit_message_text(
-            f"{result}\n"
-            f"💰 Bourse: {users[user_id]['balance']:.2f} F",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=main_menu()
-        )
-
-print("PRO MAX BOT LANCÉ")
-bot.infinity_polling()
+</body>
+</html>
