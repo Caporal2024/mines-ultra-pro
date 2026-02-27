@@ -1,45 +1,17 @@
-import os
-import random
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import asyncio
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
-# Railway utilise les variables d’environnement
-TOKEN = os.getenv("TOKEN")
+TOKEN = "TON_TOKEN_ICI"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🪙 CoinFlip", callback_data="coinflip")],
-        [InlineKeyboardButton("✈️ Lucky Jet", callback_data="lucky")]
-    ]
-
-    await update.message.reply_text(
-        "🎰 CASINO PRO\n\nChoisis un jeu :",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+async def main():
+    bot = Bot(
+        token=TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "coinflip":
-        result = random.choice(["FACE", "PILE"])
-        await query.edit_message_text(f"Résultat : {result}")
-
-    elif query.data == "lucky":
-        crash = round(random.uniform(1.00, 5.00), 2)
-        await query.edit_message_text(f"Lucky crash à {crash}x")
-
-def main():
-    if not TOKEN:
-        print("TOKEN manquant !")
-        return
-
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-
-    print("Bot Railway démarré...")
-    app.run_polling()
+    dp = Dispatcher()
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
