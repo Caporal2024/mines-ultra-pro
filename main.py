@@ -1,17 +1,25 @@
-import os
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = "TON_TOKEN_ICI"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 Mines Ultra Pro Max activé !")
 
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    print("Bot démarré...")
-    app.run_polling()
+    keyboard = [
+        [InlineKeyboardButton("✈️ Lucky Jet", callback_data="lucky")],
+        [InlineKeyboardButton("🛩 Aviator", callback_data="aviator")],
+        [InlineKeyboardButton("💣 Mines", callback_data="mines")],
+        [InlineKeyboardButton("⚽ Penalty", callback_data="penalty")],
+        [InlineKeyboardButton("🪙 CoinFlip", callback_data="coinflip")],
+        [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="apple")],
+        [InlineKeyboardButton("🎡 Roue de la Fortune", callback_data="wheel")]
+    ]
 
-if __name__ == "__main__":
-    main()
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "🎰 SUPER CASINO PRO MAX\n\nChoisissez votre jeu :",
+        reply_markup=reply_markup
+    )
+
+app = 8765706088:AAHEQvqlxuQhl2WHgsJ3g0cd6UdXaNwiqt0
