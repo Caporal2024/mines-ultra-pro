@@ -1,161 +1,151 @@
-import os
-import random
-import asyncio
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes
-)
-
-TOKEN = os.getenv("TOKEN")
-
 # ==============================
-# 📊 STOCKAGE UTILISATEURS
+# 🎮 MINES 5x5
 # ==============================
 
-users = {}
+MINES_COUNT = 5
+GRID_SIZE = 5
 
-START_BALANCE = 10000
+def generate_mines():
+    positions = list(range(GRID_SIZE * GRID_SIZE))
+    return random.sample(positions, MINES_COUNT)
 
-def get_user(user_id):
-    if user_id not in users:
-        users[user_id] = {
-            "balance": START_BALANCE,
-            "wins": 0,
-            "losses": 0,
-            "game": None,
-            "bet": 0
-        }
-    return users[user_id]
+def build_mines_keyboard(revealed):
+    keyboard = []
+    for i in range(GRID_SIZE):
+        row = []
+        for j in range(GRID_SIZE):
+            index = i * GRID_SIZE + j
+            if index in revealed:
+                row.append(InlineKeyboardButton("💎", callback_data="ignore"))
+            else:
+                row.append(InlineKeyboardButton("⬜", callback_data=f"cell_{index}"))
+        keyboard.append(row)
 
-# ==============================
-# 🎨 MENU PRINCIPAL
-# ==============================
-
-def main_menu():
-    keyboard = [
-        [InlineKeyboardButton("🎮 Mines 5x5", callback_data="mines")],
-        [InlineKeyboardButton("🚀 Lucky Jet", callback_data="lucky")],
-        [InlineKeyboardButton("⚽ Penalty", callback_data="penalty")],
-        [InlineKeyboardButton("💰 Solde", callback_data="balance")],
-        [InlineKeyboardButton("📊 Statistiques", callback_data="stats")]
-    ]
+    keyboard.append([InlineKeyboardButton("💰 Cashout", callback_data="cashout")])
     return InlineKeyboardMarkup(keyboard)
 
-# ==============================
-# 🚀 START
-# ==============================
+async def start_mines(query, user):
+    user["game"] = "mines"
+    user["bet"] = 1000
+    user["mines"] = generate_mines()
+    user["revealed"] = []
+    user["balance"] -= user["bet"]
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-
-    text = f"""
-💎 *MINES 5x5 PRO MAX*
-
-💰 Solde: {user['balance']} FCFA
-
-Choisis un jeu 👇
-"""
-    await update.message.reply_text(
-        text,
-        reply_markup=main_menu(),
-        parse_mode="Markdown"
-    )
-
-# ==============================
-# 💰 SOLDE
-# ==============================
-
-async def show_balance(query):
-    user = get_user(query.from_user.id)
-
-    text = f"""
-💰 *TON SOLDE*
-
-Solde actuel : {user['balance']} FCFA
-"""
     await query.edit_message_text(
-        text,
-        reply_markup=main_menu(),
-        parse_mode="Markdown"
+        f"💣 Mines 5x5\nMise: {user['bet']} FCFA",
+        reply_markup=build_mines_keyboard([])
     )
 
-# ==============================
-# 📊 STATISTIQUES
-# ==============================
+async def handle_mines(query, user, data):
+    index = int(data.split("_")[1])
 
-async def show_stats(query):
-    user = get_user(query.from_user.id)
-    total = user["wins"] + user["losses"]
-    winrate = (user["wins"] / total * 100) if total > 0 else 0
+    if index in user["mines"]:
+        user["losses"] += 1
+        user["game"] = None
+        await query.edit_message_text("💥 BOOM ! Tu as perdu.")
+        return
 
-    text = f"""
-📊 *STATISTIQUES*
+    user["revealed"].append(index)
 
-Victoires : {user['wins']}
-Défaites : {user['losses']}
-Parties : {total}
-Winrate : {round(winrate,2)}%
+    multiplier = 1 + (len(user["revealed"]) * 0.2)
 
-💰 Solde : {user['balance']} FCFA
-"""
     await query.edit_message_text(
-        text,
-        reply_markup=main_menu(),
-        parse_mode="Markdown"
+        f"💎 Safe!\nMultiplicateur: x{round(multiplier,2)}",
+        reply_markup=build_mines_keyboard(user["revealed"])
+    )
+
+async def mines_cashout(query, user):
+    multiplier = 1 + (len(user["revealed"]) * 0.2)
+    gain = int(user["bet"] * multiplier)
+
+    user["balance"] += gain
+    user["wins"] += 1
+    user["game"] = None
+
+    await query.edit_message_text(
+        f"💰 Cashout réussi !\nGain: {gain} FCFA"
     )
 
 # ==============================
-# 🎮 NAVIGATION
+# 🚀 LUCKY JET
 # ==============================
 
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+async def start_lucky(query, user):
+    user["game"] = "lucky"
+    user["bet"] = 1000
+    user["balance"] -= user["bet"]
 
-    data = query.data
+    multiplier = 1.0
+    crash = random.uniform(1.5, 5.0)
 
-    if data == "balance":
-        await show_balance(query)
+    message = await query.edit_message_text(
+        f"🚀 Lucky Jet\nx{multiplier}",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💰 Cashout", callback_data="lucky_cashout")]
+        ])
+    )
 
-    elif data == "stats":
-        await show_stats(query)
+    while multiplier < crash:
+        await asyncio.sleep(1)
+        multiplier += 0.3
+        try:
+            await message.edit_text(
+                f"🚀 Lucky Jet\nx{round(multiplier,2)}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💰 Cashout", callback_data="lucky_cashout")]
+                ])
+            )
+        except:
+            return
 
-    elif data == "mines":
-        await query.edit_message_text(
-            "🎮 Mines 5x5 arrive dans la Partie 2...",
-            reply_markup=main_menu()
-        )
+    user["losses"] += 1
+    user["game"] = None
+    await message.edit_text("💥 Crash ! Perdu.")
 
-    elif data == "lucky":
-        await query.edit_message_text(
-            "🚀 Lucky Jet arrive dans la Partie 2...",
-            reply_markup=main_menu()
-        )
+async def lucky_cashout(query, user):
+    text = query.message.text
+    multiplier = float(text.split("x")[1])
+    gain = int(user["bet"] * multiplier)
 
-    elif data == "penalty":
-        await query.edit_message_text(
-            "⚽ Penalty arrive dans la Partie 2...",
-            reply_markup=main_menu()
-        )
+    user["balance"] += gain
+    user["wins"] += 1
+    user["game"] = None
+
+    await query.edit_message_text(f"💰 Cashout à x{multiplier}\nGain: {gain} FCFA")
 
 # ==============================
-# 🚀 LANCEMENT BOT
+# ⚽ PENALTY
 # ==============================
 
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+async def start_penalty(query, user):
+    user["game"] = "penalty"
+    user["bet"] = 1000
+    user["balance"] -= user["bet"]
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(menu_handler))
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data="left"),
+            InlineKeyboardButton("⬆️", callback_data="center"),
+            InlineKeyboardButton("➡️", callback_data="right")
+        ]
+    ]
 
-    app.run_polling(drop_pending_updates=True)
+    await query.edit_message_text(
+        "⚽ Choisis une direction",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-if __name__ == "__main__":
-    main()
+async def handle_penalty(query, user, choice):
+    keeper = random.choice(["left","center","right"])
+
+    if choice == keeper:
+        user["losses"] += 1
+        result = "🧤 Arrêt du gardien ! Perdu."
+    else:
+        gain = user["bet"] * 2
+        user["balance"] += gain
+        user["wins"] += 1
+        result = f"⚽ BUT ! Gain: {gain} FCFA"
+
+    user["game"] = None
+    await query.edit_message_text(result)
