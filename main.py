@@ -1,4 +1,6 @@
+import time
+
 print("Railway fonctionne")
 
 while True:
-    pass
+    time.sleep(10)
