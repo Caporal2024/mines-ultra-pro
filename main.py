@@ -2,26 +2,27 @@ import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Récupération du token depuis Railway (Variables)
-TOKEN = os.getenv("TOKEN")
+# On récupère le token depuis Railway
+TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
-    raise ValueError("TOKEN non défini dans les variables Railway.")
+    raise ValueError("BOT_TOKEN non trouvé dans les variables Railway.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Bot actif et fonctionnel !")
+    await update.message.reply_text("🚀 Mines Ultra Pro est actif !")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Commande disponible :\n/start - Démarrer le bot")
+    await update.message.reply_text("Utilise /start pour démarrer le bot.")
 
 def main():
-    print("Bot démarré...")
+    print("Bot en démarrage...")
     
     app = ApplicationBuilder().token(TOKEN).build()
-
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-
+    
+    print("Bot lancé avec succès.")
     app.run_polling()
 
 if __name__ == "__main__":
