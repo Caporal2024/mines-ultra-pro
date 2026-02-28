@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import random
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -48,7 +49,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💰 Solde initial: 10 000 FCFA\n\n"
         "Commandes:\n"
         "/solde\n"
-        "/stats"
+        "/stats\n"
+        "/lucky 1000"
     )
 
 async def solde(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,11 +66,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🏆 Gains: {user[3]} FCFA\n"
         f"📉 Pertes: {user[4]} FCFA"
     )
-
-# =====================
-# Lancement
-# =====================
-import random
 
 async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -110,7 +107,12 @@ async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
             WHERE user_id=?
         """, (profit, profit, user_id))
 
-        result = f"🚀 Lucky Jet\n💥 Crash à x{crash_point}\n🛫 Cashout à x{player_multiplier}\n\n✅ Gain: {profit} FCFA"
+        result = (
+            f"🚀 Lucky Jet\n"
+            f"💥 Crash à x{crash_point}\n"
+            f"🛫 Cashout à x{player_multiplier}\n\n"
+            f"✅ Gain: {profit} FCFA"
+        )
 
     else:
         cursor.execute("""
@@ -120,7 +122,24 @@ async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
             WHERE user_id=?
         """, (bet, bet, user_id))
 
-        result = f"🚀 Lucky Jet\n💥 Crash à x{crash_point}\n❌ Tu as perdu {bet} FCFA"
+        result = (
+            f"🚀 Lucky Jet\n"
+            f"💥 Crash à x{crash_point}\n"
+            f"❌ Tu as perdu {bet} FCFA"
+        )
 
     conn.commit()
     await update.message.reply_text(result)
+
+# =====================
+# Lancement
+# =====================
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("solde", solde))
+app.add_handler(CommandHandler("stats", stats))
+app.add_handler(CommandHandler("lucky", lucky))
+
+print("🚀 Casino PRO démarré")
+app.run_polling()
