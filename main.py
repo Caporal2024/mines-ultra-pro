@@ -1,10 +1,12 @@
-const TelegramBot = require('node-telegram-bot-api');
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-const token = "TON_TOKEN_ICI";
-const bot = new TelegramBot(token, { polling: true });
+TOKEN = "TON_TOKEN_ICI"
 
-bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, "🚀 Lucky Jet est actif !");
-});
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🚀 Lucky Jet est actif !")
 
-console.log("Bot lancé...");
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+
+app.run_polling()
