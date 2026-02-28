@@ -18,9 +18,7 @@ def get_user(user_id):
         }
     return users[user_id]
 
-# ==============================
-# 🏠 MENU
-# ==============================
+# ================= MENU =================
 
 def main_menu():
     keyboard = [
@@ -33,28 +31,21 @@ def main_menu():
     return InlineKeyboardMarkup(keyboard)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎰 Casino Bot Pro Max",
-        reply_markup=main_menu()
-    )
+    await update.message.reply_text("🎰 Casino Bot Pro Max", reply_markup=main_menu())
 
-async def show_balance(query):
-    user = get_user(query.from_user.id)
+async def show_balance(query, user):
     await query.edit_message_text(
         f"💰 Solde: {user['balance']} FCFA",
         reply_markup=main_menu()
     )
 
-async def show_stats(query):
-    user = get_user(query.from_user.id)
+async def show_stats(query, user):
     await query.edit_message_text(
         f"📊 Victoires: {user['wins']}\n❌ Défaites: {user['losses']}",
         reply_markup=main_menu()
     )
 
-# ==============================
-# 🎮 MINES
-# ==============================
+# ================= MINES =================
 
 MINES_COUNT = 5
 GRID_SIZE = 5
@@ -83,10 +74,7 @@ async def start_mines(query, user):
     user["revealed"] = []
     user["balance"] -= user["bet"]
 
-    await query.edit_message_text(
-        "💣 Mines 5x5\nMise: 1000 FCFA",
-        reply_markup=build_mines_keyboard([])
-    )
+    await query.edit_message_text("💣 Mines 5x5", reply_markup=build_mines_keyboard([]))
 
 async def handle_mines(query, user, data):
     index = int(data.split("_")[1])
@@ -113,14 +101,51 @@ async def mines_cashout(query, user):
     user["wins"] += 1
     user["game"] = None
 
+    await query.edit_message_text(f"💰 Gain: {gain} FCFA", reply_markup=main_menu())
+
+# ================= LUCKY =================
+
+async def start_lucky(query, user):
+    user["game"] = "lucky"
+    user["bet"] = 1000
+    user["balance"] -= user["bet"]
+
+    multiplier = round(random.uniform(1.2, 5.0), 2)
+    gain = int(user["bet"] * multiplier)
+
+    user["balance"] += gain
+    user["wins"] += 1
+    user["game"] = None
+
     await query.edit_message_text(
-        f"💰 Gain: {gain} FCFA",
+        f"🚀 Lucky Jet\nMultiplicateur: x{multiplier}\n💰 Gain: {gain} FCFA",
         reply_markup=main_menu()
     )
 
-# ==============================
-# 🎛 HANDLER
-# ==============================
+# ================= PENALTY =================
+
+async def start_penalty(query, user):
+    user["game"] = "penalty"
+    user["bet"] = 1000
+    user["balance"] -= user["bet"]
+
+    keeper = random.choice(["left","center","right"])
+    player = random.choice(["left","center","right"])
+
+    if keeper == player:
+        user["losses"] += 1
+        result = "🧤 Arrêt ! Perdu."
+    else:
+        gain = user["bet"] * 2
+        user["balance"] += gain
+        user["wins"] += 1
+        result = f"⚽ BUT ! Gain: {gain} FCFA"
+
+    user["game"] = None
+
+    await query.edit_message_text(result, reply_markup=main_menu())
+
+# ================= HANDLER =================
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -130,19 +155,21 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     if data == "balance":
-        await show_balance(query)
+        await show_balance(query, user)
     elif data == "stats":
-        await show_stats(query)
+        await show_stats(query, user)
     elif data == "mines":
         await start_mines(query, user)
     elif data.startswith("cell_"):
         await handle_mines(query, user, data)
     elif data == "cashout":
         await mines_cashout(query, user)
+    elif data == "lucky":
+        await start_lucky(query, user)
+    elif data == "penalty":
+        await start_penalty(query, user)
 
-# ==============================
-# 🚀 MAIN
-# ==============================
+# ================= MAIN =================
 
 def main():
     if not TOKEN:
