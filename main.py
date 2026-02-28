@@ -5,15 +5,15 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ===============================
-# CONFIG
+# CONFIGURATION
 # ===============================
 
-TOKEN = ""   # <-- METS TON TOKEN ICI
+TOKEN = ""  # <-- METS TON TOKEN ICI
 START_BALANCE = 100000
 DATA_FILE = "users.json"
 
 # ===============================
-# DATA MANAGEMENT
+# GESTION UTILISATEURS
 # ===============================
 
 def load_users():
@@ -28,6 +28,7 @@ def save_users(users):
 
 def get_user(users, user_id):
     user_id = str(user_id)
+
     if user_id not in users:
         users[user_id] = {
             "balance": START_BALANCE,
@@ -39,7 +40,7 @@ def get_user(users, user_id):
 users = load_users()
 
 # ===============================
-# UI MENU
+# MENU PRINCIPAL
 # ===============================
 
 def main_menu():
@@ -52,11 +53,12 @@ def main_menu():
     return InlineKeyboardMarkup(keyboard)
 
 # ===============================
-# GAMES
+# JEUX
 # ===============================
 
 def play_mines(user):
     bet = 10000
+
     if user["balance"] < bet:
         return "❌ Solde insuffisant"
 
@@ -73,6 +75,7 @@ def play_mines(user):
 
 def play_penalty(user):
     bet = 10000
+
     if user["balance"] < bet:
         return "❌ Solde insuffisant"
 
@@ -103,6 +106,7 @@ def play_penalty(user):
 
 def play_lucky(user):
     bet = 10000
+
     if user["balance"] < bet:
         return "❌ Solde insuffisant"
 
@@ -184,10 +188,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ===============================
-# MAIN
+# LANCEMENT BOT
 # ===============================
 
 def main():
+    if TOKEN == "":
+        print("⚠️ Mets ton TOKEN dans le fichier avant de lancer.")
+        return
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
