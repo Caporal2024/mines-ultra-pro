@@ -10,7 +10,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # CONFIG
 # ==============================
 
-TOKEN = "TON_TOKEN_ICI"
+TOKEN = "8765706088:AAGJlo8ONNbJUNF8zPg4KKeiuWgZL5w0sCw
 PORT = 8080
 
 # ==============================
