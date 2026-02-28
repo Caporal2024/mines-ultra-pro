@@ -1,237 +1,155 @@
-import os
 import random
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = os.environ.get("BOT_TOKEN")
+# ==============================
+# CONFIGURATION
+# ==============================
+
+TOKEN = "TON_TOKEN_ICI"  # ⚠️ Mets ton token ici
+ADMIN_ID = 8094967191
 
 # ==============================
-# STOCKAGE GLOBAL
+# STOCKAGE UTILISATEUR
 # ==============================
+
 users = {}
-mines_games = {}
 
-# ==============================
-# UTILISATEUR
-# ==============================
 def get_user(user_id):
     if user_id not in users:
         users[user_id] = {
-            "balance": 10000,
             "wins": 0,
             "losses": 0,
-            "profit": 0
+            "history": []
         }
     return users[user_id]
+
+def is_admin(user_id):
+    return user_id == ADMIN_ID
 
 # ==============================
 # MENU PRINCIPAL
 # ==============================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Accès refusé.")
+        return
+
     keyboard = [
-        [InlineKeyboardButton("💣 Mine", callback_data="mine_menu")],
-        [InlineKeyboardButton("🥅 Penalty", callback_data="penalty_menu")],
-        [InlineKeyboardButton("🚀 Lucky Jet", callback_data="jet")],
+        [InlineKeyboardButton("💣 Mine 💎", callback_data="mine_menu")],
+        [InlineKeyboardButton("🚀 Lucky Jet", callback_data="lucky")],
+        [InlineKeyboardButton("⚽️ Pénalité", callback_data="penalty")],
         [InlineKeyboardButton("📊 Stats", callback_data="stats")]
     ]
+
     await update.message.reply_text(
-        "🎰 CASINO PRO MAX\n\nChoisis un jeu 👇",
+        "🎰 CASINO PRO MAX 👀\n📈📉🧠 Mode Intelligent Activé\n\nChoisis ton jeu 👇",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 # ==============================
-# MINE MENU
+# MENU MINE (3-5-7)
 # ==============================
+
 async def mine_menu(query):
     keyboard = [
-        [InlineKeyboardButton("🟢 3 Bombes", callback_data="mine_3")],
-        [InlineKeyboardButton("🟡 5 Bombes", callback_data="mine_5")],
-        [InlineKeyboardButton("🔴 7 Bombes", callback_data="mine_7")],
-        [InlineKeyboardButton("⬅ Retour", callback_data="menu")]
-    ]
-    await query.edit_message_text(
-        "💣 Choisis le niveau Mine",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# ==============================
-# CREER PARTIE MINE
-# ==============================
-async def start_mine_game(query, user_id, bombs):
-    grid_size = 25
-    bomb_positions = random.sample(range(grid_size), bombs)
-
-    mines_games[user_id] = {
-        "bombs": bomb_positions,
-        "revealed": [],
-        "bomb_count": bombs,
-        "multiplier": 1.0,
-        "active": True
-    }
-
-    await render_mine_grid(query, user_id)
-
-# ==============================
-# AFFICHER GRILLE
-# ==============================
-async def render_mine_grid(query, user_id, reveal_all=False):
-    game = mines_games[user_id]
-    user = get_user(user_id)
-
-    buttons = []
-
-    for i in range(25):
-        if reveal_all:
-            text = "💣" if i in game["bombs"] else "💎"
-        elif i in game["revealed"]:
-            text = "💎"
-        else:
-            text = "⬜"
-
-        buttons.append(
-            InlineKeyboardButton(text, callback_data=f"cell_{i}")
-        )
-
-    grid = [buttons[i:i+5] for i in range(0, 25, 5)]
-
-    if game["active"]:
-        grid.append([InlineKeyboardButton("💰 Cashout", callback_data="mine_cashout")])
-
-    await query.edit_message_text(
-        f"💣 Mine ({game['bomb_count']} bombes)\n"
-        f"💰 Balance: {user['balance']}\n"
-        f"📈 Multiplier: x{round(game['multiplier'],2)}",
-        reply_markup=InlineKeyboardMarkup(grid)
-    )
-
-# ==============================
-# CLIQUER CASE
-# ==============================
-async def handle_cell(query, user_id, index):
-    game = mines_games[user_id]
-    user = get_user(user_id)
-
-    if not game["active"] or index in game["revealed"]:
-        return
-
-    if index in game["bombs"]:
-        game["active"] = False
-        user["balance"] -= 1000
-        user["losses"] += 1
-        user["profit"] -= 1000
-        await render_mine_grid(query, user_id, reveal_all=True)
-    else:
-        game["revealed"].append(index)
-        game["multiplier"] += 0.2
-        await render_mine_grid(query, user_id)
-
-# ==============================
-# CASHOUT
-# ==============================
-async def mine_cashout(query, user_id):
-    game = mines_games[user_id]
-    user = get_user(user_id)
-
-    if not game["active"]:
-        return
-
-    gain = int(1000 * game["multiplier"])
-    user["balance"] += gain
-    user["wins"] += 1
-    user["profit"] += gain
-    game["active"] = False
-
-    await render_mine_grid(query, user_id, reveal_all=True)
-
-# ==============================
-# PENALTY
-# ==============================
-async def penalty_menu(query):
-    keyboard = [
         [
-            InlineKeyboardButton("⬅ Gauche", callback_data="shoot_left"),
-            InlineKeyboardButton("⬆ Centre", callback_data="shoot_center"),
-            InlineKeyboardButton("➡ Droite", callback_data="shoot_right")
+            InlineKeyboardButton("💎 3", callback_data="mine_3"),
+            InlineKeyboardButton("💎 5", callback_data="mine_5"),
+            InlineKeyboardButton("💎 7", callback_data="mine_7"),
         ],
         [InlineKeyboardButton("⬅ Retour", callback_data="menu")]
     ]
 
     await query.edit_message_text(
-        "🥅 Choisis où tirer ⚽",
+        "💣 MINE PRO MAX\nChoisis nombre de bombes 👇",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def penalty_shot(query, user_id, direction):
-    keeper = random.choice(["left", "center", "right"])
+# ==============================
+# PRÉDICTION MINE (TOUT S’OUVRE)
+# ==============================
+
+async def send_mine(query, user_id, bombs):
     user = get_user(user_id)
 
-    visual = {
-        "left": "🧤 ⬜ ⬜",
-        "center": "⬜ 🧤 ⬜",
-        "right": "⬜ ⬜ 🧤"
-    }
+    grid = ""
+    bomb_positions = random.sample(range(25), bombs)
 
-    if direction == keeper:
-        user["balance"] -= 1000
-        user["losses"] += 1
-        user["profit"] -= 1000
-        result = "❌ Arrêt !"
-    else:
-        user["balance"] += 1500
-        user["wins"] += 1
-        user["profit"] += 1500
-        result = "⚽ BUT !"
+    for i in range(25):
+        if i in bomb_positions:
+            grid += "💣 "
+        else:
+            grid += "💎 "
+        if (i + 1) % 5 == 0:
+            grid += "\n"
+
+    user["history"].append("Mine")
+    user["wins"] += 1
 
     await query.edit_message_text(
-        f"{visual[keeper]}\n\n{result}\n💰 Balance: {user['balance']}"
+        f"💣 MINE {bombs} Bombes\n\n{grid}"
     )
 
 # ==============================
 # LUCKY JET
 # ==============================
-async def lucky_jet(query, user_id):
+
+async def send_lucky(query, user_id):
     user = get_user(user_id)
-    multiplier = round(random.uniform(1.1, 5.0), 2)
+    multiplier = round(random.uniform(1.20, 3.50), 2)
 
-    if multiplier > 2:
-        gain = int(1000 * multiplier)
-        user["balance"] += gain
-        user["wins"] += 1
-        user["profit"] += gain
-        result = f"🚀 x{multiplier} 💎 +{gain}"
-    else:
-        user["balance"] -= 1000
-        user["losses"] += 1
-        user["profit"] -= 1000
-        result = f"💥 x{multiplier} ❌ -1000"
+    trend = "📈" if multiplier > 2 else "📉"
 
-    keyboard = [[InlineKeyboardButton("🔄 Rejouer", callback_data="jet")]]
+    user["history"].append("Lucky")
+    user["wins"] += 1
 
     await query.edit_message_text(
-        f"{result}\n💰 Balance: {user['balance']}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        f"🚀 LUCKY JET PRO MAX\n\n🔥 Cashout conseillé : {multiplier}x {trend}"
+    )
+
+# ==============================
+# PÉNALITÉ
+# ==============================
+
+async def send_penalty(query, user_id):
+    user = get_user(user_id)
+    direction = random.choice(["⬅️ Gauche", "➡️ Droite", "⬆️ Centre"])
+
+    user["history"].append("Penalty")
+    user["wins"] += 1
+
+    await query.edit_message_text(
+        f"⚽️ PÉNALITÉ PRO MAX\n\n🎯 Tire ici : {direction}"
     )
 
 # ==============================
 # STATS
 # ==============================
-async def show_stats(query, user_id):
+
+async def send_stats(query, user_id):
     user = get_user(user_id)
+
     await query.edit_message_text(
-        f"📊 Stats\n\n"
-        f"💰 Balance: {user['balance']}\n"
-        f"🏆 Wins: {user['wins']}\n"
-        f"❌ Losses: {user['losses']}\n"
-        f"📈 Profit: {user['profit']}"
+        f"📊 STATISTIQUES PRO MAX\n\n"
+        f"🎮 Jeux joués : {len(user['history'])}\n"
+        f"🏆 Succès : {user['wins']}\n"
+        f"🧠 Mode intelligent actif 👀"
     )
 
 # ==============================
 # HANDLER GLOBAL
 # ==============================
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
+
+    if not is_admin(user_id):
+        return
 
     if query.data == "menu":
         await start(update, context)
@@ -241,34 +159,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data.startswith("mine_"):
         bombs = int(query.data.split("_")[1])
-        await start_mine_game(query, user_id, bombs)
+        await send_mine(query, user_id, bombs)
 
-    elif query.data.startswith("cell_"):
-        index = int(query.data.split("_")[1])
-        await handle_cell(query, user_id, index)
+    elif query.data == "lucky":
+        await send_lucky(query, user_id)
 
-    elif query.data == "mine_cashout":
-        await mine_cashout(query, user_id)
-
-    elif query.data == "penalty_menu":
-        await penalty_menu(query)
-
-    elif query.data.startswith("shoot_"):
-        direction = query.data.split("_")[1]
-        await penalty_shot(query, user_id, direction)
-
-    elif query.data == "jet":
-        await lucky_jet(query, user_id)
+    elif query.data == "penalty":
+        await send_penalty(query, user_id)
 
     elif query.data == "stats":
-        await show_stats(query, user_id)
+        await send_stats(query, user_id)
 
 # ==============================
-# MAIN
+# LANCEMENT BOT
 # ==============================
+
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    print("CASINO PRO MAX ACTIF 🚀")
+
+    print("🎰 CASINO PRO MAX ACTIF 🚀")
     app.run_polling()
