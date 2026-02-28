@@ -1,74 +1,17 @@
-import os
-import sqlite3
-import random
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from datetime import datetime, timedelta
 
-TOKEN = os.getenv("TOKEN")
-
-if not TOKEN:
-    raise ValueError("TOKEN manquant")
-
-# =====================
-# Base de données
-# =====================
-conn = sqlite3.connect("casino.db", check_same_thread=False)
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    balance INTEGER DEFAULT 10000,
-    games_played INTEGER DEFAULT 0,
-    total_won INTEGER DEFAULT 0,
-    total_lost INTEGER DEFAULT 0
-)
-""")
-conn.commit()
-
-# =====================
-# Fonctions utilitaires
-# =====================
-def get_user(user_id):
-    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    user = cursor.fetchone()
-    if not user:
-        cursor.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-        return get_user(user_id)
-    return user
-
-# =====================
-# Commandes
-# =====================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+cooldowns = {}async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    get_user(user_id)
-    await update.message.reply_text(
-        "💎 Bienvenue au Casino PRO MAX\n\n"
-        "💰 Solde initial: 10 000 FCFA\n\n"
-        "Commandes:\n"
-        "/solde\n"
-        "/stats\n"
-        "/lucky 1000"
-    )
 
-async def solde(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    await update.message.reply_text(f"💰 Ton solde: {user[1]} FCFA")
+    # Anti-spam 3 secondes
+    now = datetime.now()
+    if user_id in cooldowns:
+        if now - cooldowns[user_id] < timedelta(seconds=3):
+            await update.message.reply_text("⏳ Attends 3 secondes avant de rejouer.")
+            return
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    await update.message.reply_text(
-        f"📊 Statistiques:\n"
-        f"💰 Solde: {user[1]} FCFA\n"
-        f"🎮 Parties: {user[2]}\n"
-        f"🏆 Gains: {user[3]} FCFA\n"
-        f"📉 Pertes: {user[4]} FCFA"
-    )
+    cooldowns[user_id] = now
 
-async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
     user = get_user(user_id)
 
     if len(context.args) == 0:
@@ -113,7 +56,6 @@ async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🛫 Cashout à x{player_multiplier}\n\n"
             f"✅ Gain: {profit} FCFA"
         )
-
     else:
         cursor.execute("""
             UPDATE users
@@ -130,16 +72,3 @@ async def lucky(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conn.commit()
     await update.message.reply_text(result)
-
-# =====================
-# Lancement
-# =====================
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("solde", solde))
-app.add_handler(CommandHandler("stats", stats))
-app.add_handler(CommandHandler("lucky", lucky))
-
-print("🚀 Casino PRO démarré")
-app.run_polling()
