@@ -137,11 +137,4 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("profile", profile))
-app.add_handler(CommandHandler("mines", mines))
-app.add_handler(CommandHandler("luckyjet", luckyjet))
-app.add_handler(CommandHandler("rank", rank))
-app.add_handler(CommandHandler("admin", admin))
-
-app.run_polling()
+8765706088:AAHEQvqlxuQhl2WHgsJ3g0cd6UdXaNwiqt0
