@@ -1,12 +1,22 @@
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = "TON_TOKEN_ICI"
+# Récupère le token depuis Railway (Variables → BOT_TOKEN)
+TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot démarré 🚀")
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
+def main():
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN non défini dans les variables Railway")
 
-app.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+
+    print("Bot en cours de démarrage...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
