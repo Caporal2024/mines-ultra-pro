@@ -1,7 +1,7 @@
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from database import get_user
+from database import get_user, create_user
 
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -11,7 +11,12 @@ ADMIN_ID = 8094967191
 # ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+
+    # Créer utilisateur si pas existant
     user = get_user(user_id)
+    if not user:
+        create_user(user_id)
+        user = get_user(user_id)
 
     message = (
         f"🎰 Bienvenue au Casino Premium\n\n"
@@ -40,16 +45,14 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message)
 
 
+# ===== MAIN =====
 def main():
-    if not TOKEN:
-        raise ValueError("BOT_TOKEN not found in environment variables")
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("profile", profile))
 
-    print("Bot en ligne...")
+    print("Bot lancé...")
     app.run_polling()
 
 
