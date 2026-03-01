@@ -1,179 +1,218 @@
+import json
 import os
-import telebot
 import random
-import time
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+import statistics
+import matplotlib.pyplot as plt
 
-# ==================================================
-# 🔐 TOKEN depuis Railway (NE PAS METTRE ICI)
-# ==================================================
-TOKEN = os.getenv("TOKEN_MAIN")
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
-if not TOKEN:
-    raise ValueError("TOKEN_MAIN manquant dans Railway Variables.")
+# ================= CONFIG =================
 
-bot = telebot.TeleBot(TOKEN)
+TOKEN = "PUT_YOUR_TOKEN_HERE"
+START_BALANCE = 100000
+STOP_LOSS = 10000
+TARGET_PROFIT = 15000
+BET_PERCENT = 0.02
+DATA_FILE = "user_data.json"
 
-# ==================================================
-# 📊 STOCKAGE UTILISATEURS
-# ==================================================
-users = {}
+# ==========================================
+
+# -------- DATABASE --------
+
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
+
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f)
 
 def get_user(user_id):
-    if user_id not in users:
-        users[user_id] = {
-            "balance": 1000,
-            "loss_streak": 0,
-            "profit": 0
+    data = load_data()
+    if str(user_id) not in data:
+        data[str(user_id)] = {
+            "balance": START_BALANCE,
+            "start_balance": START_BALANCE,
+            "history": [],
+            "mode": "SIM"
         }
-    return users[user_id]
+        save_data(data)
+    return data[str(user_id)]
 
-# ==================================================
-# 🤖 IA INTELLIGENTE
-# ==================================================
-def ai_advice(user):
-    if user["loss_streak"] >= 2:
-        return "🛑 IA: 2 pertes consécutives. Arrête maintenant."
-    if user["profit"] >= 300:
-        return "💰 IA: Objectif atteint. Sécurise ton gain."
-    return "✅ IA: Situation stable."
+def update_user(user_id, user_data):
+    data = load_data()
+    data[str(user_id)] = user_data
+    save_data(data)
 
-# ==================================================
-# 🎨 MENU CASINO PREMIUM
-# ==================================================
-@bot.message_handler(commands=['start'])
-def start(message):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(KeyboardButton("🚀 LUCKY JET LIVE"))
-    markup.row(KeyboardButton("💣 MINES 5x5 LIVE"))
-    markup.row(KeyboardButton("📊 IA STATUT"))
-    markup.row(KeyboardButton("💰 SOLDE"))
+# -------- MENU --------
 
-    bot.send_message(
-        message.chat.id,
-        "🎰 CASINO PREMIUM\nBienvenue !",
-        reply_markup=markup
+def main_menu():
+    keyboard = [
+        [
+            InlineKeyboardButton("🎮 Simulation", callback_data="mode_sim"),
+            InlineKeyboardButton("🔴 LIVE", callback_data="mode_live"),
+        ],
+        [
+            InlineKeyboardButton("🚀 Jouer", callback_data="play"),
+            InlineKeyboardButton("📊 Stats", callback_data="stats"),
+        ],
+        [
+            InlineKeyboardButton("💰 Balance", callback_data="balance"),
+            InlineKeyboardButton("📈 Graph", callback_data="graph"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# -------- IA --------
+
+def analyze(history):
+    if len(history) < 5:
+        return "Pas assez de données..."
+
+    recent = history[-30:]
+    avg = statistics.mean(recent)
+    low = sum(1 for x in recent if x < 1.5)
+    high = sum(1 for x in recent if x > 5)
+
+    if low > high:
+        strat = "SAFE 1.40x"
+    else:
+        strat = "NORMAL 2x"
+
+    return f"""
+💜 GOD MODE ANALYSE 💜
+
+Tours analysés: {len(recent)}
+Moyenne: {round(avg,2)}x
+Crash <1.5x: {low}
+Crash >5x: {high}
+
+🎯 Stratégie: {strat}
+"""
+
+# -------- COMMANDES --------
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    get_user(update.effective_user.id)
+    await update.message.reply_text(
+        "💜 LUCKYJET SCHOOL PRO 💜",
+        reply_markup=main_menu()
     )
 
-# ==================================================
-# 💰 SOLDE
-# ==================================================
-@bot.message_handler(func=lambda m: m.text == "💰 SOLDE")
-def balance(message):
-    user = get_user(message.from_user.id)
-    bot.send_message(
-        message.chat.id,
-        f"💰 Solde: {user['balance']} FCFA\n📈 Profit: {user['profit']} FCFA"
-    )
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-# ==================================================
-# 🚀 LUCKY JET LIVE RAPIDE
-# ==================================================
-@bot.message_handler(func=lambda m: m.text == "🚀 LUCKY JET LIVE")
-def luckyjet(message):
-    user = get_user(message.from_user.id)
+    user = get_user(query.from_user.id)
 
-    bet = 100
-    if user["balance"] < bet:
-        bot.send_message(message.chat.id, "❌ Solde insuffisant.")
+    if query.data == "mode_sim":
+        user["mode"] = "SIM"
+        update_user(query.from_user.id, user)
+        await query.edit_message_text("🎮 Mode Simulation", reply_markup=main_menu())
+
+    elif query.data == "mode_live":
+        user["mode"] = "LIVE"
+        update_user(query.from_user.id, user)
+        await query.edit_message_text("🔴 Mode LIVE\nEnvoie juste un nombre (ex: 2.34)", reply_markup=main_menu())
+
+    elif query.data == "play":
+        if user["mode"] != "SIM":
+            await query.answer("Active Simulation", show_alert=True)
+            return
+
+        bet = user["balance"] * BET_PERCENT
+        crash = round(random.uniform(1.0, 10.0), 2)
+        user["history"].append(crash)
+
+        if crash >= 2:
+            user["balance"] += bet * crash - bet
+        else:
+            user["balance"] -= bet
+
+        update_user(query.from_user.id, user)
+
+        await query.edit_message_text(
+            f"🎰 {crash}x\n💰 {round(user['balance'],2)} FCFA",
+            reply_markup=main_menu()
+        )
+
+    elif query.data == "stats":
+        await query.edit_message_text(
+            analyze(user["history"]),
+            reply_markup=main_menu()
+        )
+
+    elif query.data == "balance":
+        await query.edit_message_text(
+            f"💰 Balance: {round(user['balance'],2)} FCFA",
+            reply_markup=main_menu()
+        )
+
+    elif query.data == "graph":
+        if len(user["history"]) < 2:
+            await query.answer("Pas assez de données", show_alert=True)
+            return
+
+        balances = []
+        balance = user["start_balance"]
+
+        for m in user["history"]:
+            bet = balance * BET_PERCENT
+            if m >= 2:
+                balance += bet * m - bet
+            else:
+                balance -= bet
+            balances.append(balance)
+
+        plt.figure()
+        plt.plot(balances)
+        plt.title("Evolution Bankroll")
+        plt.xlabel("Tours")
+        plt.ylabel("Balance")
+        plt.savefig("graph.png")
+        plt.close()
+
+        await context.bot.send_photo(
+            chat_id=query.from_user.id,
+            photo=open("graph.png", "rb")
+        )
+
+# -------- LIVE RAPIDE --------
+
+async def live_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
+
+    if user["mode"] != "LIVE":
         return
 
-    user["balance"] -= bet
+    try:
+        value = float(update.message.text)
+        user["history"].append(value)
+        update_user(update.effective_user.id, user)
+        await update.message.reply_text("🔴 Multiplicateur ajouté", reply_markup=main_menu())
+    except:
+        pass
 
-    crash = round(random.uniform(1.10, 3.00), 2)
-    msg = bot.send_message(message.chat.id, "🚀 Décollage...")
+# -------- MAIN --------
 
-    multiplier = 1.00
-    while multiplier < crash:
-        multiplier += 0.07  # plus rapide
-        bot.edit_message_text(
-            f"🚀 {round(multiplier,2)}x",
-            message.chat.id,
-            msg.message_id
-        )
-        time.sleep(0.15)
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    bot.edit_message_text(
-        f"💥 CRASH à {crash}x",
-        message.chat.id,
-        msg.message_id
-    )
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, live_input))
 
-    # Auto cashout x1.40
-    if crash >= 1.40:
-        gain = int(bet * 1.40)
-        profit = gain - bet
-        user["balance"] += gain
-        user["profit"] += profit
-        user["loss_streak"] = 0
-        bot.send_message(message.chat.id, f"✅ Gain: +{profit} FCFA")
-    else:
-        user["loss_streak"] += 1
-        bot.send_message(message.chat.id, "❌ Perdu.")
+    app.run_polling()
 
-# ==================================================
-# 💣 MINES 5x5 LIVE INTERACTIF
-# ==================================================
-@bot.message_handler(func=lambda m: m.text == "💣 MINES 5x5 LIVE")
-def mines(message):
-    user_id = message.from_user.id
-    mines_positions = random.sample(range(25), 3)
-
-    users[user_id]["mines"] = mines_positions
-    users[user_id]["safe_clicks"] = 0
-
-    keyboard = InlineKeyboardMarkup(row_width=5)
-
-    for i in range(25):
-        keyboard.add(
-            InlineKeyboardButton("⬜", callback_data=f"cell_{i}")
-        )
-
-    bot.send_message(
-        message.chat.id,
-        "💣 Clique une case :",
-        reply_markup=keyboard
-    )
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("cell_"))
-def handle_click(call):
-    user_id = call.from_user.id
-    user = get_user(user_id)
-
-    index = int(call.data.split("_")[1])
-
-    if index in user.get("mines", []):
-        user["loss_streak"] += 1
-        bot.edit_message_text(
-            "💥 BOOM ! Tu as perdu.",
-            call.message.chat.id,
-            call.message.message_id
-        )
-    else:
-        user["safe_clicks"] += 1
-        bot.answer_callback_query(call.id, "💎 Safe !")
-
-        if user["safe_clicks"] >= 2:
-            gain = 80
-            user["balance"] += gain
-            user["profit"] += gain
-            user["loss_streak"] = 0
-            bot.edit_message_text(
-                f"💎 2 cases safe ! Gain: +{gain} FCFA",
-                call.message.chat.id,
-                call.message.message_id
-            )
-
-# ==================================================
-# 📊 IA STATUT
-# ==================================================
-@bot.message_handler(func=lambda m: m.text == "📊 IA STATUT")
-def ia_status(message):
-    user = get_user(message.from_user.id)
-    advice = ai_advice(user)
-    bot.send_message(message.chat.id, advice)
-
-# ==================================================
-# ▶ LANCEMENT
-# ==================================================
-bot.infinity_polling()
+if __name__ == "__main__":
+    main()
