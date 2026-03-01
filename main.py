@@ -2,109 +2,148 @@ import os
 import random
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-)
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# 🔑 Récupération du token Railway
+# ===== CONFIG =====
+
 TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = 8094967191  # TON ID TELEGRAM
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 
-bankroll = 10000
-profit_total = 0
+users = {}
 
+def get_user(user_id):
+    if user_id not in users:
+        users[user_id] = {
+            "bankroll": 10000,
+            "profit": 0,
+            "games": 0
+        }
+    return users[user_id]
+
+# ===== MENUS =====
 
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("💣 Mines 5x5", callback_data="mines")],
-        [InlineKeyboardButton("🚀 Lucky Jet", callback_data="lucky")],
-        [InlineKeyboardButton("📊 Statistiques", callback_data="stats")],
+        [InlineKeyboardButton("🚀 Signal Live", callback_data="signal")],
+        [InlineKeyboardButton("📊 Statistiques", callback_data="stats")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def back_menu():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Menu", callback_data="menu")]])
+
+# ===== START =====
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💜 MINES PRO 20.7\n\nChoisis un jeu 👇",
-        reply_markup=main_menu(),
-    )
+    user = get_user(update.effective_user.id)
 
+    text = f"""
+💎 <b>PRO MAX V4</b>
+━━━━━━━━━━━━━━━━━━
+💰 Bankroll : <b>{user['bankroll']} FCFA</b>
+━━━━━━━━━━━━━━━━━━
+"""
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=main_menu())
+
+# ===== SIGNAL SIMULÉ (propre) =====
+
+def generate_signal():
+    entry = round(random.uniform(1.20, 1.60), 2)
+    confidence = random.randint(60, 85)
+    risk = random.choice(["Faible", "Moyen"])
+    return entry, confidence, risk
+
+# ===== HANDLER =====
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global bankroll, profit_total
-
     query = update.callback_query
     await query.answer()
+    user = get_user(query.from_user.id)
 
-    if query.data == "mines":
-        grid = []
-        for i in range(5):
-            row = []
-            for j in range(5):
-                num = i * 5 + j + 1
-                row.append(
-                    InlineKeyboardButton(str(num), callback_data=f"cell_{num}")
-                )
-            grid.append(row)
-
+    if query.data == "menu":
         await query.edit_message_text(
-            "💣 Clique une case :",
-            reply_markup=InlineKeyboardMarkup(grid),
+            "💎 MENU PRINCIPAL",
+            reply_markup=main_menu()
         )
 
-    elif query.data.startswith("cell_"):
-        number = query.data.split("_")[1]
+    # ===== MINES SIMPLE =====
+    elif query.data == "mines":
         result = random.choice(["safe", "bomb"])
 
         if result == "safe":
             gain = random.randint(500, 1500)
-            bankroll += gain
-            profit_total += gain
-            text = f"✅ Case {number}\n+{gain}\nBankroll: {bankroll}"
+            user["bankroll"] += gain
+            user["profit"] += gain
+            text = f"""
+✅ <b>SAFE</b>
+💰 Gain : +{gain} FCFA
+🏦 Bankroll : {user['bankroll']}
+"""
         else:
             loss = random.randint(500, 1500)
-            bankroll -= loss
-            profit_total -= loss
-            text = f"💣 BOOM {number}\n-{loss}\nBankroll: {bankroll}"
+            user["bankroll"] -= loss
+            user["profit"] -= loss
+            text = f"""
+💣 <b>BOOM</b>
+💸 Perte : -{loss} FCFA
+🏦 Bankroll : {user['bankroll']}
+"""
 
-        await query.edit_message_text(text)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=back_menu())
 
-    elif query.data == "lucky":
-        multiplier = round(random.uniform(1.2, 5.0), 2)
-        gain = int(1000 * multiplier)
-        bankroll += gain
-        profit_total += gain
+    # ===== SIGNAL LIVE INTERNE =====
+    elif query.data == "signal":
+        entry, confidence, risk = generate_signal()
 
-        await query.edit_message_text(
-            f"🚀 Lucky Jet\nMultiplicateur x{multiplier}\n+{gain}\nBankroll: {bankroll}"
-        )
+        text = f"""
+🚀 <b>SIGNAL LIVE</b>
+━━━━━━━━━━━━━━━━━━
+🎯 Entrée conseillée : <b>x{entry}</b>
+📊 Confiance : <b>{confidence}%</b>
+⚠️ Risque : <b>{risk}</b>
+━━━━━━━━━━━━━━━━━━
+⚡ Analyse basée sur algorithme interne
+"""
 
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=back_menu())
+
+    # ===== STATS =====
     elif query.data == "stats":
-        await query.edit_message_text(
-            f"📊 Statistiques\n\nBankroll: {bankroll}\nProfit total: {profit_total}"
-        )
+        text = f"""
+📊 <b>STATISTIQUES</b>
+━━━━━━━━━━━━━━━━━━
+💰 Bankroll : {user['bankroll']}
+📈 Profit : {user['profit']}
+━━━━━━━━━━━━━━━━━━
+"""
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=back_menu())
 
+# ===== ADMIN COMMAND =====
+
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id == ADMIN_ID:
+        await update.message.reply_text("🔐 Accès Admin confirmé")
+    else:
+        await update.message.reply_text("⛔ Accès refusé")
+
+# ===== MAIN =====
 
 def main():
     if not TOKEN:
-        print("❌ BOT_TOKEN manquant")
+        print("BOT_TOKEN manquant")
         return
 
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("✅ Bot lancé avec succès")
+    print("PRO MAX V4 actif")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
