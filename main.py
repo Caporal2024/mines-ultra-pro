@@ -1,200 +1,154 @@
 import random
 import asyncio
+import logging
 import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-START_BALANCE = 10000
-BET_AMOUNT = 500
-MAX_LOSS = -3000
-PROFIT_TARGET = 4000
+logging.basicConfig(level=logging.INFO)
 
 users = {}
-ai_data = {}
 
-# ======================
-# INITIALISATION USER
-# ======================
-
-def init_user(user_id):
-    if user_id not in users:
-        users[user_id] = START_BALANCE
-    if user_id not in ai_data:
-        ai_data[user_id] = {
-            "start_balance": START_BALANCE,
-            "wins": 0,
-            "losses": 0
-        }
-
-def ai_control(user_id):
-    profit = users[user_id] - ai_data[user_id]["start_balance"]
-    if profit <= MAX_LOSS:
-        return "stop"
-    if profit >= PROFIT_TARGET:
-        return "target"
-    return "ok"
-
-# ======================
-# MENU PRINCIPAL (GROS)
-# ======================
-
-def main_menu():
-    keyboard = [
-        [InlineKeyboardButton("💣💣💣  MINES 3 LIVE  💣💣💣", callback_data="mines_3")],
-        [InlineKeyboardButton("💣💣💣  MINES 5 LIVE  💣💣💣", callback_data="mines_5")],
-        [InlineKeyboardButton("💣💣💣  MINES 7 LIVE  💣💣💣", callback_data="mines_7")],
-        [InlineKeyboardButton("🚀🚀🚀  LUCKY JET LIVE  🚀🚀🚀", callback_data="jet")],
-        [InlineKeyboardButton("🧠🧠🧠  GESTION CAPITAL IA  🧠🧠🧠", callback_data="capital")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# ======================
-# START
-# ======================
-
+# =========================
+# MENU PRINCIPAL
+# =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    init_user(user_id)
+    keyboard = [
+        [InlineKeyboardButton("💣 MINES 5x5 • 3 Bombes", callback_data="mines_3")],
+        [InlineKeyboardButton("💣 MINES 5x5 • 5 Bombes", callback_data="mines_5")],
+        [InlineKeyboardButton("💣 MINES 5x5 • 7 Bombes", callback_data="mines_7")],
+        [InlineKeyboardButton("🚀 LUCKY JET LIVE ⚡", callback_data="jet")],
+        [InlineKeyboardButton("🧠 GESTION CAPITAL IA", callback_data="capital")],
+    ]
 
-    await update.message.reply_text(
-        f"🎰 CASINO LIVE PRO\n\n💰 Solde: {users[user_id]}",
-        reply_markup=main_menu()
-    )
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-# ======================
-# MINES 5x5 NUMÉROTÉ
-# ======================
+    if update.message:
+        await update.message.reply_text("🔥 MENU PRINCIPAL 🔥", reply_markup=reply_markup)
+    else:
+        await update.callback_query.edit_message_text("🔥 MENU PRINCIPAL 🔥", reply_markup=reply_markup)
 
-def generate_grid(game):
-    keyboard = []
-    for row in range(5):
-        row_buttons = []
-        for col in range(5):
-            index = row * 5 + col
-            number = index + 1
+# =========================
+# GENERER GRILLE
+# =========================
+def generate_board(bombs):
+    board = ["💎"] * 25
+    bomb_positions = random.sample(range(25), bombs)
+    for pos in bomb_positions:
+        board[pos] = "💣"
+    return board
 
-            if index in game["revealed"]:
-                row_buttons.append(InlineKeyboardButton("⭐", callback_data="ignore"))
-            else:
-                row_buttons.append(InlineKeyboardButton(str(number), callback_data=f"cell_{index}"))
-
-        keyboard.append(row_buttons)
-    return InlineKeyboardMarkup(keyboard)
-
-async def start_mines(update: Update, context: ContextTypes.DEFAULT_TYPE, mines_count):
+# =========================
+# LANCER MINES
+# =========================
+async def start_mines(update: Update, context: ContextTypes.DEFAULT_TYPE, bombs):
     query = update.callback_query
+    await query.answer()
+
     user_id = query.from_user.id
-    init_user(user_id)
+    board = generate_board(bombs)
 
-    if ai_control(user_id) != "ok":
-        await query.answer("🛑 Limite IA atteinte")
-        return
-
-    bombs = random.sample(range(25), mines_count)
-    context.user_data["mines"] = {
-        "bombs": bombs,
+    users[user_id] = {
+        "board": board,
         "revealed": []
     }
 
+    await update_grid(query, user_id, bombs)
+
+async def update_grid(query, user_id, bombs):
+    game = users[user_id]
+    board = game["board"]
+    revealed = game["revealed"]
+
+    keyboard = []
+
+    for i in range(25):
+        if i in revealed:
+            text = board[i]
+        else:
+            text = "⬛"
+        keyboard.append(InlineKeyboardButton(text, callback_data=f"cell_{i}_{bombs}"))
+
+    grid = [keyboard[i:i+5] for i in range(0, 25, 5)]
+    grid.append([InlineKeyboardButton("🔙 MENU", callback_data="menu")])
+
     await query.edit_message_text(
-        f"💣 Mines 5x5 LIVE ({mines_count} bombes)\nClique un numéro 👇",
-        reply_markup=generate_grid(context.user_data["mines"])
+        f"💣 MINES 5x5 ({bombs} bombes)\n\nClique une case 👇",
+        reply_markup=InlineKeyboardMarkup(grid)
     )
 
+# =========================
+# CLIQUER CASE
+# =========================
 async def handle_mines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_id = query.from_user.id
+    await query.answer()
 
-    if "mines" not in context.user_data:
+    user_id = query.from_user.id
+    data = query.data.split("_")
+
+    index = int(data[1])
+    bombs = int(data[2])
+
+    game = users.get(user_id)
+    if not game:
         return
 
-    game = context.user_data["mines"]
-    index = int(query.data.split("_")[1])
+    if index in game["revealed"]:
+        return
 
-    if index in game["bombs"]:
-        users[user_id] -= BET_AMOUNT
-        ai_data[user_id]["losses"] += 1
+    game["revealed"].append(index)
 
-        await query.edit_message_text(
-            f"💥 BOOM ! Bombe explosée\n💰 Solde: {users[user_id]}",
-            reply_markup=main_menu()
-        )
-        context.user_data.pop("mines")
-    else:
-        users[user_id] += 300
-        ai_data[user_id]["wins"] += 1
-        game["revealed"].append(index)
+    if game["board"][index] == "💣":
+        await query.edit_message_text("💥 BOOM ! Tu as perdu.\n\n/start pour rejouer.")
+        users.pop(user_id)
+        return
 
-        await query.edit_message_reply_markup(
-            reply_markup=generate_grid(game)
-        )
+    await update_grid(query, user_id, bombs)
 
-# ======================
+# =========================
 # LUCKY JET LIVE RAPIDE
-# ======================
-
+# =========================
 async def start_jet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_id = query.from_user.id
-    init_user(user_id)
+    await query.answer()
 
-    if ai_control(user_id) != "ok":
-        await query.answer("🛑 Limite IA atteinte")
-        return
+    message = await query.edit_message_text("🚀 LUCKY JET LIVE ⚡\n\nDémarrage...")
 
-    crash = round(random.uniform(1.5, 4.0), 2)
-    multiplier = 1.0
+    multiplier = 1.00
 
-    msg = await query.edit_message_text("🚀 LUCKY JET LIVE\n")
+    for _ in range(10):
+        multiplier += random.uniform(0.10, 0.50)
+        multiplier = round(multiplier, 2)
+        await asyncio.sleep(0.8)
+        await message.edit_text(f"🚀 LUCKY JET LIVE ⚡\n\nMultiplicateur : x{multiplier}")
 
-    while multiplier < crash:
-        multiplier += 0.6
-        await msg.edit_text(f"🚀 x{round(multiplier,2)}")
-        await asyncio.sleep(0.2)
+    await message.edit_text(f"💥 Crash à x{multiplier}\n\n/start")
 
-    users[user_id] -= BET_AMOUNT
-    ai_data[user_id]["losses"] += 1
-
-    await msg.edit_text(
-        f"💥 CRASH à x{crash}\n💰 Solde: {users[user_id]}",
-        reply_markup=main_menu()
-    )
-
-# ======================
-# CAPITAL IA
-# ======================
-
+# =========================
+# GESTION CAPITAL IA
+# =========================
 async def capital(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_id = query.from_user.id
-    init_user(user_id)
+    await query.answer()
 
-    profit = users[user_id] - ai_data[user_id]["start_balance"]
+    suggestion = random.choice([
+        "📊 Mise idéale : 2% du capital",
+        "📊 Mise agressive : 5%",
+        "🛑 Stop Loss conseillé : -15%",
+        "🎯 Objectif profit : +20%"
+    ])
 
-    await query.edit_message_text(
-        f"""🧠 GESTION CAPITAL IA
+    await query.edit_message_text(f"🧠 GESTION CAPITAL IA\n\n{suggestion}\n\n/start")
 
-💰 Solde: {users[user_id]}
-📈 Profit: {profit}
-✅ Victoires: {ai_data[user_id]['wins']}
-❌ Pertes: {ai_data[user_id]['losses']}
-
-Stop Loss: {MAX_LOSS}
-Objectif: {PROFIT_TARGET}
-""",
-        reply_markup=main_menu()
-    )
-
-# ======================
+# =========================
 # MAIN
-# ======================
-
+# =========================
 def main():
     token = os.getenv("BOT_TOKEN")
 
     if not token:
-        print("BOT_TOKEN non défini")
-        return
+        raise ValueError("BOT_TOKEN non défini dans Railway")
 
     app = ApplicationBuilder().token(token).build()
 
@@ -202,9 +156,10 @@ def main():
     app.add_handler(CallbackQueryHandler(lambda u,c: start_mines(u,c,3), pattern="mines_3"))
     app.add_handler(CallbackQueryHandler(lambda u,c: start_mines(u,c,5), pattern="mines_5"))
     app.add_handler(CallbackQueryHandler(lambda u,c: start_mines(u,c,7), pattern="mines_7"))
+    app.add_handler(CallbackQueryHandler(handle_mines, pattern="cell_"))
     app.add_handler(CallbackQueryHandler(start_jet, pattern="jet"))
     app.add_handler(CallbackQueryHandler(capital, pattern="capital"))
-    app.add_handler(CallbackQueryHandler(handle_mines, pattern="cell_"))
+    app.add_handler(CallbackQueryHandler(start, pattern="menu"))
 
     app.run_polling()
 
