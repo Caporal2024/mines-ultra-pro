@@ -1,5 +1,6 @@
 import random
 import asyncio
+import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -8,9 +9,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# =====================
-# CONFIG IA CAPITAL
-# =====================
+# =========================
+# CONFIGURATION CASINO
+# =========================
 
 START_BALANCE = 10000
 BET_AMOUNT = 500
@@ -20,9 +21,9 @@ PROFIT_TARGET = 4000
 users = {}
 ai_data = {}
 
-# =====================
-# INIT USER
-# =====================
+# =========================
+# INITIALISATION UTILISATEUR
+# =========================
 
 def init_user(user_id):
     if user_id not in users:
@@ -49,9 +50,9 @@ def ai_control(user_id):
 
     return "ok"
 
-# =====================
+# =========================
 # MENU PRINCIPAL
-# =====================
+# =========================
 
 def main_menu():
     keyboard = [
@@ -71,9 +72,9 @@ def main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# =====================
+# =========================
 # START
-# =====================
+# =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -84,9 +85,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu()
     )
 
-# =====================
-# MINES
-# =====================
+# =========================
+# MINES 5x5 LIVE
+# =========================
 
 def generate_grid(game):
     keyboard = []
@@ -95,7 +96,7 @@ def generate_grid(game):
         for j in range(5):
             index = i * 5 + j
             if index in game["revealed"]:
-                row.append(InlineKeyboardButton("⭐", callback_data="x"))
+                row.append(InlineKeyboardButton("⭐", callback_data="ignore"))
             else:
                 row.append(InlineKeyboardButton("⬜", callback_data=f"cell_{index}"))
         keyboard.append(row)
@@ -114,11 +115,10 @@ async def start_mines(update: Update, context: ContextTypes.DEFAULT_TYPE, mines_
     context.user_data["mines"] = {
         "bombs": bombs,
         "revealed": [],
-        "mines_count": mines_count
     }
 
     await query.edit_message_text(
-        f"💣 Mines LIVE ({mines_count})\nSolde: {users[user_id]}",
+        f"💣 Mines LIVE ({mines_count})\n💰 Solde: {users[user_id]}",
         reply_markup=generate_grid(context.user_data["mines"])
     )
 
@@ -144,6 +144,7 @@ async def handle_mines_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 reply_markup=main_menu()
             )
             context.user_data.pop("mines")
+
         else:
             users[user_id] += 300
             ai_data[user_id]["wins"] += 1
@@ -153,9 +154,9 @@ async def handle_mines_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 reply_markup=generate_grid(game)
             )
 
-# =====================
-# LUCKY JET
-# =====================
+# =========================
+# LUCKY JET LIVE RAPIDE
+# =========================
 
 async def start_jet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -183,9 +184,9 @@ async def start_jet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu()
     )
 
-# =====================
-# CAPITAL INFO
-# =====================
+# =========================
+# GESTION CAPITAL
+# =========================
 
 async def capital_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -195,7 +196,7 @@ async def capital_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profit = users[user_id] - ai_data[user_id]["start_balance"]
 
     await query.edit_message_text(
-        f"""🧠 Gestion Capital
+        f"""🧠 GESTION CAPITAL
 
 💰 Solde: {users[user_id]}
 📈 Profit: {profit}
@@ -208,12 +209,18 @@ Objectif: {PROFIT_TARGET}
         reply_markup=main_menu()
     )
 
-# =====================
+# =========================
 # MAIN
-# =====================
+# =========================
 
 def main():
-    app = ApplicationBuilder().token("YOUR_TOKEN_HERE").build()
+    token = os.getenv("BOT_TOKEN")
+
+    if not token:
+        print("⚠️ BOT_TOKEN non défini.")
+        return
+
+    app = ApplicationBuilder().token(token).build()
 
     app.add_handler(CommandHandler("start", start))
 
@@ -223,7 +230,6 @@ def main():
 
     app.add_handler(CallbackQueryHandler(start_jet, pattern="jet"))
     app.add_handler(CallbackQueryHandler(capital_info, pattern="capital"))
-
     app.add_handler(CallbackQueryHandler(handle_mines_click, pattern="cell_"))
 
     app.run_polling()
