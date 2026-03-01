@@ -15,7 +15,7 @@ def main_menu():
     keyboard = [
         [InlineKeyboardButton("🎮 MINES 5x5 PRO", callback_data="mines")],
         [InlineKeyboardButton("🚀 CRASH IA", callback_data="crash")],
-        [InlineKeyboardButton("🤖 MODE AUTO", callback_data="auto")],
+        [InlineKeyboardButton("🤖 MODE AUTO", callback_data="auto")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -49,25 +49,34 @@ async def crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def generate_mines():
     return random.sample(range(25), 3)
 
+def build_mines_keyboard(user_id):
+    data = user_sessions[user_id]
+    keyboard = []
+
+    for i in range(25):
+        if i in data["opened"]:
+            button = InlineKeyboardButton("✅", callback_data="ignore")
+        else:
+            button = InlineKeyboardButton("⬜", callback_data=f"cell_{i}")
+        keyboard.append(button)
+
+    rows = [keyboard[i:i+5] for i in range(0, 25, 5)]
+    rows.append([InlineKeyboardButton("💰 ENCAISSER", callback_data="cashout")])
+
+    return InlineKeyboardMarkup(rows)
+
 async def mines(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    mines_positions = generate_mines()
     user_sessions[query.from_user.id] = {
-        "mines": mines_positions,
+        "mines": generate_mines(),
         "opened": []
     }
 
-    keyboard = []
-    for i in range(25):
-        keyboard.append(InlineKeyboardButton("⬜", callback_data=f"cell_{i}"))
-
-    rows = [keyboard[i:i+5] for i in range(0, 25, 5)]
-
     await query.edit_message_text(
-        "💣 MINES 5x5\n\nChoisis une case 👇",
-        reply_markup=InlineKeyboardMarkup(rows)
+        "💣 MINES 5x5 PRO\n\nChoisis une case 👇",
+        reply_markup=build_mines_keyboard(query.from_user.id)
     )
 
 async def cell_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -83,6 +92,9 @@ async def cell_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cell = int(query.data.split("_")[1])
 
+    if cell in data["opened"]:
+        return
+
     if cell in data["mines"]:
         await query.edit_message_text(
             "💥 BOOM ! Mine touchée !",
@@ -92,12 +104,21 @@ async def cell_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data["opened"].append(cell)
 
-    remaining_mines = 3 - len([m for m in data["mines"] if m in data["opened"]])
+    remaining_mines = 3
     remaining_cells = 25 - len(data["opened"])
     risk = round((remaining_mines / remaining_cells) * 100, 2)
 
     await query.edit_message_text(
-        f"✅ SAFE\n\n📊 Risque actuel: {risk}%\n\nContinuer ou revenir menu ?",
+        f"✅ SAFE\n\n📊 Risque actuel: {risk}%",
+        reply_markup=build_mines_keyboard(user_id)
+    )
+
+async def cashout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    await query.edit_message_text(
+        "💰 Tu as encaissé avec succès !",
         reply_markup=main_menu()
     )
 
@@ -107,10 +128,10 @@ async def auto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     decision = random.choice(["ENTRER", "ATTENDRE"])
-    cashout = round(random.uniform(1.5, 3.0), 2)
+    cashout_value = round(random.uniform(1.5, 3.0), 2)
 
     await query.edit_message_text(
-        f"🤖 MODE AUTO\n\nDécision: {decision}\nAuto cashout: {cashout}x",
+        f"🤖 MODE AUTO\n\nDécision: {decision}\nAuto cashout: {cashout_value}x",
         reply_markup=main_menu()
     )
 
@@ -126,6 +147,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await auto(update, context)
     elif query.data.startswith("cell_"):
         await cell_click(update, context)
+    elif query.data == "cashout":
+        await cashout(update, context)
+    elif query.data == "ignore":
+        return
 
 # ================= RUN =================
 app = ApplicationBuilder().token(TOKEN).build()
