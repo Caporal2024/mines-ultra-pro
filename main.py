@@ -1,14 +1,19 @@
-import telebot
-from telebot import types
-import sqlite3
 import random
+import sqlite3
 from datetime import datetime, timedelta
 
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+
 # ======================
-# CONFIG
+# CONFIG (TOKEN VIDE)
 # ======================
-TOKEN = "PASTE_YOUR_TOKEN_HERE"
-bot = telebot.TeleBot(TOKEN)
+TOKEN = ""
 
 # ======================
 # DATABASE
@@ -21,10 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     balance INTEGER,
     life INTEGER,
-    total_wins INTEGER,
-    total_losses INTEGER,
-    stop_loss INTEGER,
-    profit_target INTEGER
+    wins INTEGER,
+    losses INTEGER
 )
 """)
 
@@ -32,7 +35,7 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS jackpot (
     id INTEGER PRIMARY KEY,
     amount INTEGER,
-    last_win_date TEXT
+    last_win TEXT
 )
 """)
 
@@ -47,64 +50,51 @@ if cursor.fetchone() is None:
 # UTILS
 # ======================
 
-def today():
-    return datetime.now().strftime("%Y-%m-%d")
+def get_user(user_id):
+    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    user = cursor.fetchone()
+    if not user:
+        cursor.execute(
+            "INSERT INTO users VALUES (?, ?, ?, ?, ?)",
+            (user_id, 10000, 3, 0, 0),
+        )
+        conn.commit()
+        return (user_id, 10000, 3, 0, 0)
+    return user
 
 def time_until_midnight():
     now = datetime.now()
     tomorrow = now + timedelta(days=1)
     midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day)
-    remaining = midnight - now
-    return str(remaining).split('.')[0]
-
-def get_user(user_id):
-    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    user = cursor.fetchone()
-    if not user:
-        cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, 10000, 3, 0, 0, -3000, 4000))
-        conn.commit()
-        return (user_id, 10000, 3, 0, 0, -3000, 4000)
-    return user
-
-def update_stats(user_id, win):
-    if win:
-        cursor.execute("UPDATE users SET total_wins=total_wins+1 WHERE user_id=?", (user_id,))
-    else:
-        cursor.execute("UPDATE users SET total_losses=total_losses+1 WHERE user_id=?", (user_id,))
-    conn.commit()
-
-# ======================
-# MENU
-# ======================
+    return str((midnight - now)).split(".")[0]
 
 def main_menu():
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("💣 Mines", callback_data="mines"),
-        types.InlineKeyboardButton("❤️ Mines Life", callback_data="mineslife"),
-        types.InlineKeyboardButton("🚀 Crash", callback_data="crash"),
-        types.InlineKeyboardButton("✈️ Lucky Jet", callback_data="lucky")
-    )
-    return markup
+    keyboard = [
+        [
+            InlineKeyboardButton("💣 Mines", callback_data="mines"),
+            InlineKeyboardButton("❤️ Mines Life", callback_data="mineslife"),
+        ],
+        [
+            InlineKeyboardButton("🚀 Crash", callback_data="crash"),
+            InlineKeyboardButton("✈️ Lucky Jet", callback_data="lucky"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 # ======================
 # START
 # ======================
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    user = get_user(message.from_user.id)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
 
     cursor.execute("SELECT amount FROM jackpot WHERE id=1")
     jackpot = cursor.fetchone()[0]
 
-    bot.send_message(
-        message.chat.id,
-        f"""
-🟣 CASINO ULTRA PRO MAX 🟣
+    text = f"""
+🟣 CASINO ULTRA 🟣
 
-👤 ID: {message.from_user.id}
+👤 ID: {update.effective_user.id}
 💰 Solde: {user[1]} FCFA
 ❤️ Vies: {user[2]}
 
@@ -114,59 +104,66 @@ def start(message):
 ⏳ Reset: {time_until_midnight()}
 
 🎛️ Choisis un jeu :
-""",
-        reply_markup=main_menu()
-    )
+"""
+
+    await update.message.reply_text(text, reply_markup=main_menu())
 
 # ======================
-# GAME LOGIC
+# GAME HANDLER
 # ======================
 
-@bot.callback_query_handler(func=lambda call: True)
-def game_handler(call):
-    user = get_user(call.from_user.id)
+async def game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user = get_user(query.from_user.id)
     bet = 1000
 
     if user[1] < bet:
-        bot.answer_callback_query(call.id, "❌ Solde insuffisant")
+        await query.edit_message_text("❌ Solde insuffisant", reply_markup=main_menu())
         return
 
     multiplier = round(random.uniform(1.0, 5.0), 2)
+    win = multiplier > 2
 
-    win = multiplier > 2.0
-
-    if call.data == "mineslife":
+    if query.data == "mineslife":
         if user[2] <= 0:
-            bot.answer_callback_query(call.id, "💀 Plus de vies")
+            await query.edit_message_text("💀 Plus de vies", reply_markup=main_menu())
             return
-        if not win:
-            cursor.execute("UPDATE users SET life=life-1 WHERE user_id=?", (user[0],))
+
+        if win:
+            cursor.execute("UPDATE users SET balance=balance+500, wins=wins+1 WHERE user_id=?", (user[0],))
         else:
-            cursor.execute("UPDATE users SET balance=balance+500 WHERE user_id=?", (user[0],))
+            cursor.execute("UPDATE users SET life=life-1, losses=losses+1 WHERE user_id=?", (user[0],))
 
     else:
         if win:
             gain = int(bet * multiplier)
-            cursor.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (gain, user[0]))
+            cursor.execute("UPDATE users SET balance=balance+?, wins=wins+1 WHERE user_id=?", (gain, user[0]))
             cursor.execute("UPDATE jackpot SET amount=amount+100 WHERE id=1")
         else:
-            cursor.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (bet, user[0]))
+            cursor.execute("UPDATE users SET balance=balance-?, losses=losses+1 WHERE user_id=?", (bet, user[0]))
             cursor.execute("UPDATE jackpot SET amount=amount+200 WHERE id=1")
 
-    update_stats(user[0], win)
     conn.commit()
 
-    result_text = f"🎰 x{multiplier}\n"
-    result_text += "💎 GAGNÉ !" if win else "💥 PERDU !"
+    result = f"🎰 x{multiplier}\n"
+    result += "💎 GAGNÉ !" if win else "💥 PERDU !"
 
-    bot.edit_message_text(
-        result_text,
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=main_menu()
-    )
+    await query.edit_message_text(result, reply_markup=main_menu())
 
 # ======================
-# RUN
+# MAIN
 # ======================
-bot.polling()
+
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(game_handler))
+
+    print("BOT LANCÉ ✅")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
