@@ -2,14 +2,15 @@ import os
 import random
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
-# ==============================
-# CONFIG
-# ==============================
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Token via Railway
-OWNER_ID = 8094967191
+# 🔑 Récupération du token Railway
+TOKEN = os.getenv("BOT_TOKEN")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -19,43 +20,24 @@ logging.basicConfig(
 bankroll = 10000
 profit_total = 0
 
-# ==============================
-# MENU PRINCIPAL
-# ==============================
 
 def main_menu():
     keyboard = [
-        [InlineKeyboardButton("💣 Mines 5x5 LIVE", callback_data="mines")],
-        [InlineKeyboardButton("🚀 Lucky Jet LIVE", callback_data="lucky")],
-        [InlineKeyboardButton("📊 Statistiques", callback_data="stats")]
+        [InlineKeyboardButton("💣 Mines 5x5", callback_data="mines")],
+        [InlineKeyboardButton("🚀 Lucky Jet", callback_data="lucky")],
+        [InlineKeyboardButton("📊 Statistiques", callback_data="stats")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ==============================
-# START
-# ==============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = """
-💜 <b>MINES ULTRA PRO</b>
-
-🎨 Interface Violet Néon Premium
-🚀 Version LIVE Ultra Rapide
-📊 Gestion Bankroll Active
-
-Choisis un mode 👇
-"""
     await update.message.reply_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=main_menu()
+        "💜 MINES PRO 20.7\n\nChoisis un jeu 👇",
+        reply_markup=main_menu(),
     )
 
-# ==============================
-# CALLBACK
-# ==============================
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global bankroll, profit_total
 
     query = update.callback_query
@@ -73,9 +55,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             grid.append(row)
 
         await query.edit_message_text(
-            "💣 <b>MINES 5x5 LIVE</b>\n\nClique une case :",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(grid)
+            "💣 Clique une case :",
+            reply_markup=InlineKeyboardMarkup(grid),
         )
 
     elif query.data.startswith("cell_"):
@@ -86,49 +67,44 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             gain = random.randint(500, 1500)
             bankroll += gain
             profit_total += gain
-            message = f"✅ Case {number} SAFE\n💰 +{gain}\n📊 Bankroll: {bankroll}"
+            text = f"✅ Case {number}\n+{gain}\nBankroll: {bankroll}"
         else:
             loss = random.randint(500, 1500)
             bankroll -= loss
             profit_total -= loss
-            message = f"💣 BOOM Case {number}\n❌ -{loss}\n📊 Bankroll: {bankroll}"
+            text = f"💣 BOOM {number}\n-{loss}\nBankroll: {bankroll}"
 
-        await query.edit_message_text(message)
+        await query.edit_message_text(text)
 
     elif query.data == "lucky":
-        multiplier = round(random.uniform(1.1, 5.0), 2)
+        multiplier = round(random.uniform(1.2, 5.0), 2)
         gain = int(1000 * multiplier)
         bankroll += gain
         profit_total += gain
 
         await query.edit_message_text(
-            f"🚀 <b>Lucky Jet LIVE</b>\n\n🔥 x{multiplier}\n💰 +{gain}\n📊 Bankroll: {bankroll}",
-            parse_mode="HTML"
+            f"🚀 Lucky Jet\nMultiplicateur x{multiplier}\n+{gain}\nBankroll: {bankroll}"
         )
 
     elif query.data == "stats":
         await query.edit_message_text(
-            f"📊 <b>Statistiques</b>\n\n💰 Bankroll: {bankroll}\n📈 Profit Total: {profit_total}",
-            parse_mode="HTML"
+            f"📊 Statistiques\n\nBankroll: {bankroll}\nProfit total: {profit_total}"
         )
 
-# ==============================
-# RUN
-# ==============================
 
 def main():
-    if not BOT_TOKEN:
-        print("ERREUR: BOT_TOKEN manquant dans Railway Variables")
+    if not TOKEN:
+        print("❌ BOT_TOKEN manquant")
         return
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("Bot is running...")
+    print("✅ Bot lancé avec succès")
+    app.run_polling()
 
-    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
