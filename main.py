@@ -1,6 +1,7 @@
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from database import get_user, update_balance
+from database import get_user
 
 ADMIN_ID = 8094967191
 
@@ -36,7 +37,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message)
 
 
-# ===== ADMIN PANEL =====
+# ===== ADMIN =====
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Accès refusé.")
@@ -47,7 +48,12 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ===== MAIN =====
 def main():
-    app = ApplicationBuilder().token("YOUR_BOT_TOKEN_HERE").build()
+    TOKEN = os.getenv("BOT_TOKEN")
+
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN non trouvé !")
+
+    app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("profile", profile))
