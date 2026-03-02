@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS users (
     total_profit INTEGER DEFAULT 0
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS sessions (
+    user_id INTEGER,
+    start_balance INTEGER,
+    consecutive_losses INTEGER DEFAULT 0
+)
+""")
+
 conn.commit()
 
 # ================= UTILS =================
@@ -40,11 +49,26 @@ def update_user(user_id, balance, profit):
                    (balance, profit, user_id))
     conn.commit()
 
+def start_session(user_id, balance):
+    cursor.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    cursor.execute("INSERT INTO sessions (user_id, start_balance, consecutive_losses) VALUES (?, ?, 0)",
+                   (user_id, balance))
+    conn.commit()
+
+def get_session(user_id):
+    cursor.execute("SELECT start_balance, consecutive_losses FROM sessions WHERE user_id=?", (user_id,))
+    return cursor.fetchone()
+
+def update_losses(user_id, losses):
+    cursor.execute("UPDATE sessions SET consecutive_losses=? WHERE user_id=?",
+                   (losses, user_id))
+    conn.commit()
+
 # ================= KEYBOARDS =================
 def menu_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎮 Jouer", callback_data="play")],
-        [InlineKeyboardButton("⚡ Auto Mode", callback_data="auto")],
+        [InlineKeyboardButton("⚡ Auto Mode Sécurisé", callback_data="auto")],
         [InlineKeyboardButton("🏆 Classement", callback_data="leaderboard")],
         [InlineKeyboardButton("📊 Stats", callback_data="stats")]
     ])
@@ -57,19 +81,20 @@ def back_menu():
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "💎 *CRASH PRO MAX*\n\nClique MENU 👇",
+        "💎 *CRASH PRO MAX SÉCURISÉ*\n\nClique MENU 👇",
         parse_mode="Markdown",
         reply_markup=back_menu()
     )
 
 # ================= GAME =================
-async def play_round(message, user_id):
+async def play_round(message, user_id, auto=False):
     balance, total_profit = get_user(user_id)
 
-    bet = 500
+    bet = max(int(balance * 0.03), 100)  # 3% minimum 100 FCFA
+
     if balance < bet:
         await message.edit_text("❌ Solde insuffisant", reply_markup=back_menu())
-        return
+        return False
 
     multiplier = round(random.uniform(1.0, 7.0), 2)
 
@@ -88,17 +113,46 @@ async def play_round(message, user_id):
 
     await asyncio.sleep(0.5)
 
+    session = get_session(user_id)
+    if not session:
+        start_session(user_id, balance)
+        session = get_session(user_id)
+
+    start_balance, losses = session
+
     if multiplier >= 2:
         gain = bet
         balance += gain
         total_profit += gain
+        losses = 0
         result = f"💰 GAIN {gain} FCFA"
     else:
         balance -= bet
         total_profit -= bet
+        losses += 1
         result = f"💥 PERTE {bet} FCFA"
 
     update_user(user_id, balance, total_profit)
+    update_losses(user_id, losses)
+
+    profit_session = balance - start_balance
+
+    # STOP CONDITIONS (auto mode only)
+    if auto:
+        if losses >= 2:
+            await message.edit_text("🛑 STOP - 2 pertes consécutives\n🔒 Session fermée",
+                                    reply_markup=back_menu())
+            return False
+
+        if profit_session >= start_balance * 0.10:
+            await message.edit_text("🏆 Objectif +10% atteint\n🔒 Session fermée",
+                                    reply_markup=back_menu())
+            return False
+
+        if profit_session <= -(start_balance * 0.12):
+            await message.edit_text("🚨 Stop-loss -12% activé\n🔒 Session fermée",
+                                    reply_markup=back_menu())
+            return False
 
     final = (
         "━━━━━━━━━━━━━━━\n"
@@ -109,7 +163,9 @@ async def play_round(message, user_id):
         "━━━━━━━━━━━━━━━"
     )
 
-    await message.edit_text(final, parse_mode="Markdown", reply_markup=back_menu())
+    await message.edit_text(final, parse_mode="Markdown")
+
+    return True
 
 # ================= HANDLER =================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,20 +177,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "menu":
         await query.edit_message_text(
-            "💎 *CRASH PRO MAX*\n\nChoisis 👇",
+            "💎 *CRASH PRO MAX SÉCURISÉ*\n\nChoisis 👇",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
         )
 
     elif query.data == "play":
+        start_session(user_id, balance)
         msg = await query.edit_message_text("🚀 Préparation...")
         await play_round(msg, user_id)
 
     elif query.data == "auto":
-        msg = await query.edit_message_text("⚡ MODE AUTO ACTIVÉ (3 rounds)")
-        for _ in range(3):
+        start_session(user_id, balance)
+        msg = await query.edit_message_text("⚡ MODE AUTO SÉCURISÉ ACTIVÉ")
+
+        while True:
             await asyncio.sleep(5)
-            await play_round(msg, user_id)
+            cont = await play_round(msg, user_id, auto=True)
+            if not cont:
+                break
 
     elif query.data == "stats":
         await query.edit_message_text(
@@ -160,7 +221,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("Bot PRO MAX lancé 🚀")
+    print("Bot PRO MAX sécurisé lancé 🚀")
     app.run_polling()
 
 if __name__ == "__main__":
