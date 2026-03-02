@@ -16,54 +16,70 @@ def get_user(user_id):
     if user_id not in users:
         users[user_id] = {
             "bankroll": 10000,
-            "profit": 0,
-            "mines": [],
-            "revealed": [],
-            "bomb_count": 5
+            "bomb_count": 3,
+            "mines": []
         }
     return users[user_id]
 
-# ===== MENUS =====
+# ================= MENU =================
 
 def main_menu():
     keyboard = [
-        [InlineKeyboardButton("🚀 Signal Live", callback_data="signal")],
-        [InlineKeyboardButton("💣 Mines 5x5", callback_data="mines")],
+        [InlineKeyboardButton("💣 Mines 5x5", callback_data="mines_menu")],
+        [InlineKeyboardButton("⚡ Lucky Jet LIVE", callback_data="lucky_menu")],
         [InlineKeyboardButton("📊 Statistiques", callback_data="stats")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def mines_menu():
+    keyboard = [
+        [
+            InlineKeyboardButton("💣 3", callback_data="bomb_3"),
+            InlineKeyboardButton("💣 5", callback_data="bomb_5"),
+            InlineKeyboardButton("💣 7", callback_data="bomb_7")
+        ],
+        [InlineKeyboardButton("🔙 Menu", callback_data="menu")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def lucky_menu():
+    keyboard = [
+        [InlineKeyboardButton("⚡ DÉMARRER LIVE", callback_data="start_lucky")],
+        [InlineKeyboardButton("🔙 Menu", callback_data="menu")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 def back_menu():
     return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Menu", callback_data="menu")]])
 
-# ===== START =====
+# ================= START =================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.effective_user.id)
     text = f"""
-💎 <b>PRO MAX V5</b>
+💎 <b>PRO MAX V7</b>
 ━━━━━━━━━━━━━━━━━━
 💰 Bankroll : <b>{user['bankroll']} FCFA</b>
 ━━━━━━━━━━━━━━━━━━
 """
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=main_menu())
 
-# ===== SIGNAL ANIMÉ =====
+# ================= LUCKY JET LIVE =================
 
-async def run_signal_animation(query):
+async def lucky_live_animation(query):
     multiplier = 1.00
-    message = await query.edit_message_text("🚀 Multiplication en cours...\n\nx1.00")
+    message = await query.edit_message_text("⚡ Lucky Jet LIVE\n\n🚀 x1.00")
 
-    for _ in range(8):
-        await asyncio.sleep(0.5)
-        multiplier += random.uniform(0.05, 0.20)
+    for _ in range(12):
+        await asyncio.sleep(0.35)
+        multiplier += random.uniform(0.05, 0.30)
         multiplier = round(multiplier, 2)
-        await message.edit_text(f"🚀 Multiplication en cours...\n\nx{multiplier}")
+        await message.edit_text(f"⚡ Lucky Jet LIVE\n\n🚀 x{multiplier}")
 
     await asyncio.sleep(0.5)
     await message.edit_text(
         f"""
-💥 <b>STOP</b>
+💥 <b>CRASH</b>
 ━━━━━━━━━━━━━━━━━━
 🎯 Résultat final : <b>x{multiplier}</b>
 ━━━━━━━━━━━━━━━━━━
@@ -72,18 +88,18 @@ async def run_signal_animation(query):
         reply_markup=back_menu()
     )
 
-# ===== MINES =====
+# ================= MINES =================
 
 def generate_mines(count):
     return random.sample(range(25), count)
 
-def build_grid(user, reveal_all=False):
+def build_grid(user, reveal=False):
     grid = []
     for i in range(5):
         row = []
         for j in range(5):
             index = i * 5 + j
-            if reveal_all:
+            if reveal:
                 if index in user["mines"]:
                     row.append(InlineKeyboardButton("💣", callback_data="x"))
                 else:
@@ -93,7 +109,7 @@ def build_grid(user, reveal_all=False):
         grid.append(row)
     return InlineKeyboardMarkup(grid)
 
-# ===== BUTTON HANDLER =====
+# ================= HANDLER =================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -103,13 +119,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "menu":
         await query.edit_message_text("💎 MENU PRINCIPAL", reply_markup=main_menu())
 
-    elif query.data == "signal":
-        await run_signal_animation(query)
+    elif query.data == "mines_menu":
+        await query.edit_message_text("💣 Choisis 3 - 5 - 7 bombes", reply_markup=mines_menu())
 
-    elif query.data == "mines":
-        user["mines"] = generate_mines(user["bomb_count"])
+    elif query.data.startswith("bomb_"):
+        bomb_count = int(query.data.split("_")[1])
+        user["bomb_count"] = bomb_count
+        user["mines"] = generate_mines(bomb_count)
         await query.edit_message_text(
-            "💣 Clique une case",
+            f"💣 Partie lancée avec {bomb_count} bombes\nClique une case",
             reply_markup=build_grid(user)
         )
 
@@ -125,7 +143,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🏦 Bankroll : {user['bankroll']}
 """,
                 parse_mode="HTML",
-                reply_markup=build_grid(user, reveal_all=True)
+                reply_markup=build_grid(user, reveal=True)
             )
         else:
             user["bankroll"] += 500
@@ -136,8 +154,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🏦 Bankroll : {user['bankroll']}
 """,
                 parse_mode="HTML",
-                reply_markup=build_grid(user, reveal_all=True)
+                reply_markup=build_grid(user, reveal=True)
             )
+
+    elif query.data == "lucky_menu":
+        await query.edit_message_text("⚡ Lucky Jet LIVE", reply_markup=lucky_menu())
+
+    elif query.data == "start_lucky":
+        await lucky_live_animation(query)
 
     elif query.data == "stats":
         await query.edit_message_text(
@@ -145,14 +169,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📊 <b>STATISTIQUES</b>
 ━━━━━━━━━━━━━━━━━━
 💰 Bankroll : {user['bankroll']}
-📈 Profit : {user['profit']}
 ━━━━━━━━━━━━━━━━━━
 """,
             parse_mode="HTML",
             reply_markup=back_menu()
         )
 
-# ===== MAIN =====
+# ================= MAIN =================
 
 def main():
     if not TOKEN:
@@ -163,7 +186,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("PRO MAX V5 actif")
+    print("PRO MAX V7 actif")
     app.run_polling()
 
 if __name__ == "__main__":
