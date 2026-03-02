@@ -3,18 +3,16 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 TOKEN = os.getenv("TOKEN")
-PORT = int(os.environ.get("PORT", 8000))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Bot Railway fonctionne !")
+    await update.message.reply_text("✅ Bot actif sur Railway.")
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    print("Bot lancé...")
+    await app.run_polling()
 
-print("Bot démarré...")
-
-app.run_webhook(
-    listen="0.0.0.0",
-    port=PORT,
-    webhook_url=f"https://{os.environ.get('RAILWAY_STATIC_URL')}"
-)
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
