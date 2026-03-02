@@ -1,5 +1,10 @@
 import os
 from flask import Flask
+from threading import Thread
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 app = Flask(__name__)
 
@@ -7,6 +12,18 @@ app = Flask(__name__)
 def home():
     return "Bot is running"
 
-if __name__ == "__main__":
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🚀 Mines Ultra Pro est actif !")
+
+def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+
+def run_bot():
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.run_polling()
+
+if __name__ == "__main__":
+    Thread(target=run_flask).start()
+    run_bot()
