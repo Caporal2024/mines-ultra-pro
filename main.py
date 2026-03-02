@@ -1,246 +1,199 @@
 import random
 import asyncio
-import sqlite3
-import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-
-TOKEN = os.getenv("BOT_TOKEN")
-
-# ================= DATABASE =================
-conn = sqlite3.connect("database.db", check_same_thread=False)
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    balance INTEGER DEFAULT 10000,
-    total_profit INTEGER DEFAULT 0,
-    wins INTEGER DEFAULT 0,
-    losses INTEGER DEFAULT 0,
-    vip INTEGER DEFAULT 0
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes
 )
-""")
-conn.commit()
 
-crash_history = []
+# ==============================
+# CONFIGURATION GLOBALE
+# ==============================
 
-# ================= USER SYSTEM =================
-def get_user(user_id):
-    cursor.execute("SELECT balance, total_profit, wins, losses, vip FROM users WHERE user_id=?", (user_id,))
-    user = cursor.fetchone()
+START_BALANCE = 10000
+BET_AMOUNT = 1000
+STOP_LOSS = -3000
+PROFIT_TARGET = 4000
 
-    if not user:
-        cursor.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-        return 10000, 0, 0, 0, 0
+games = {}
+users = {}
 
-    return user
+# ==============================
+# INITIALISATION UTILISATEUR
+# ==============================
 
-def update_user(user_id, balance, profit, wins, losses, vip):
-    cursor.execute(
-        "UPDATE users SET balance=?, total_profit=?, wins=?, losses=?, vip=? WHERE user_id=?",
-        (balance, profit, wins, losses, vip, user_id)
-    )
-    conn.commit()
+def init_user(user_id):
+    if user_id not in users:
+        users[user_id] = {
+            "balance": START_BALANCE,
+            "profit": 0,
+            "played": 0,
+            "wins": 0,
+            "losses": 0,
+            "current_streak": 0,
+            "best_streak": 0
+        }
 
-# ================= KEYBOARDS =================
-def menu_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚀 Crash", callback_data="crash")],
-        [InlineKeyboardButton("💣 Mines 5x5", callback_data="mines")],
-        [InlineKeyboardButton("💰 Dépôt +2000", callback_data="deposit")],
-        [InlineKeyboardButton("💎 Activer VIP", callback_data="vip")],
-        [InlineKeyboardButton("📊 Stats", callback_data="stats")]
-    ])
+# ==============================
+# GENERATION MINES
+# ==============================
 
-def back_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📋 MENU", callback_data="menu")]
-    ])
+def generate_mines(mines_count):
+    return random.sample(range(25), mines_count)
 
-# ================= START =================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎰 CASINO BOT PRO\n\nClique MENU 👇",
-        reply_markup=back_menu()
-    )
+# ==============================
+# CREATION GRILLE
+# ==============================
 
-# ================= CRASH =================
-async def crash_game(message, user_id):
-    balance, profit, wins, losses, vip = get_user(user_id)
-    bet = 500
-
-    if balance < bet:
-        await message.edit_text("❌ Solde insuffisant", reply_markup=back_menu())
-        return
-
-    multiplier = round(random.uniform(1.0, 6.0), 2)
-    crash_history.append(multiplier)
-    if len(crash_history) > 10:
-        crash_history.pop(0)
-
-    await message.edit_text("🚀 1.00x")
-    live = 1.0
-
-    while live < multiplier and live < 3:
-        await asyncio.sleep(0.4)
-        live += 0.4
-        try:
-            await message.edit_text(f"🚀 {round(live,2)}x")
-        except:
-            break
-
-    await asyncio.sleep(0.5)
-    auto_cashout = 2.0 if vip else 1.8
-
-    if multiplier >= auto_cashout:
-        gain = bet
-        balance += gain
-        profit += gain
-        wins += 1
-        result = f"💰 GAIN +{gain} FCFA"
-    else:
-        balance -= bet
-        profit -= bet
-        losses += 1
-        result = f"💥 PERTE -{bet} FCFA"
-
-    update_user(user_id, balance, profit, wins, losses, vip)
-
-    history = " | ".join([f"{x}x" for x in crash_history])
-
-    await message.edit_text(
-        f"💥 Crash à {multiplier}x\n\n"
-        f"{result}\n\n"
-        f"🏦 Bankroll: {balance}\n"
-        f"📜 Historique: {history}",
-        reply_markup=back_menu()
-    )
-
-# ================= MINES (1 CLIC = REVEAL ALL) =================
-def generate_grid(mine_pos):
+def create_grid(reveal=False, mines_positions=None):
     keyboard = []
-    for i in range(25):
-        if i == mine_pos:
-            text = "💣"
-        else:
-            text = "✅"
-        keyboard.append(InlineKeyboardButton(text, callback_data="none"))
 
-    rows = [keyboard[i:i+5] for i in range(0, 25, 5)]
-    rows.append([InlineKeyboardButton("📋 MENU", callback_data="menu")])
-    return InlineKeyboardMarkup(rows)
+    for i in range(0, 25, 5):
+        row = []
+        for j in range(5):
+            index = i + j
 
-async def start_mines(update, context):
-    query = update.callback_query
-    user_id = query.from_user.id
+            if reveal:
+                if index in mines_positions:
+                    row.append(InlineKeyboardButton("💣", callback_data="locked"))
+                else:
+                    row.append(InlineKeyboardButton("💎", callback_data="locked"))
+            else:
+                row.append(InlineKeyboardButton("🟪", callback_data=str(index)))
 
-    balance, profit, wins, losses, vip = get_user(user_id)
-    bet = 500
+        keyboard.append(row)
 
-    if balance < bet:
-        await query.edit_message_text("❌ Solde insuffisant", reply_markup=back_menu())
-        return
+    if reveal:
+        keyboard.append([InlineKeyboardButton("🔄 Rejouer", callback_data="restart")])
+        keyboard.append([InlineKeyboardButton("📊 Statistiques", callback_data="stats")])
 
-    mine_pos = random.randint(0, 24)
-    context.user_data["mine_pos"] = mine_pos
-    context.user_data["bet"] = bet
+    return InlineKeyboardMarkup(keyboard)
 
-    # grille vide au départ
-    empty = []
-    for i in range(25):
-        empty.append(InlineKeyboardButton("⬜", callback_data=f"mine_{i}"))
-    rows = [empty[i:i+5] for i in range(0, 25, 5)]
-    await query.edit_message_text("💣 Choisis une case 👇", reply_markup=InlineKeyboardMarkup(rows))
+# ==============================
+# MENU PRINCIPAL
+# ==============================
 
-async def handle_mine_click(update, context):
-    query = update.callback_query
-    user_id = query.from_user.id
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    init_user(user_id)
+    user = users[user_id]
 
-    balance, profit, wins, losses, vip = get_user(user_id)
-    mine_pos = context.user_data.get("mine_pos")
-    bet = context.user_data.get("bet")
+    keyboard = [
+        [InlineKeyboardButton("💣 3 Mines", callback_data="mines_3")],
+        [InlineKeyboardButton("💣 5 Mines", callback_data="mines_5")],
+        [InlineKeyboardButton("💣 7 Mines", callback_data="mines_7")],
+        [InlineKeyboardButton("📊 Mes Statistiques", callback_data="stats")]
+    ]
 
-    pos = int(query.data.split("_")[1])
-
-    if pos == mine_pos:
-        balance -= bet
-        profit -= bet
-        losses += 1
-        result_text = f"💣 BOOM\n- {bet} FCFA"
-    else:
-        gain = bet
-        balance += gain
-        profit += gain
-        wins += 1
-        result_text = f"✅ SAFE\n+ {gain} FCFA"
-
-    update_user(user_id, balance, profit, wins, losses, vip)
-
-    await query.edit_message_text(
-        f"{result_text}\n\n🏦 Bankroll : {balance}",
-        reply_markup=generate_grid(mine_pos)
+    await update.message.reply_text(
+        f"💎 SOLDE : {user['balance']} FCFA\n"
+        f"📈 Profit : {user['profit']} FCFA\n\n"
+        f"🎮 Choisis ton mode LIVE 👇",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ================= BUTTON HANDLER =================
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==============================
+# GESTION DES ACTIONS
+# ==============================
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     user_id = query.from_user.id
+    init_user(user_id)
+    user = users[user_id]
 
-    if query.data == "menu":
-        await query.edit_message_text("🎰 CASINO BOT PRO\n\nChoisis 👇", reply_markup=menu_keyboard())
+    # ==========================
+    # CHOIX NOMBRE MINES
+    # ==========================
+    if query.data.startswith("mines_"):
 
-    elif query.data == "crash":
-        msg = await query.edit_message_text("🚀 Préparation...")
-        await crash_game(msg, user_id)
+        if user["profit"] <= STOP_LOSS:
+            await query.edit_message_text("🛑 STOP LOSS atteint.")
+            return
 
-    elif query.data == "mines":
-        await start_mines(update, context)
+        if user["profit"] >= PROFIT_TARGET:
+            await query.edit_message_text("🎉 OBJECTIF PROFIT atteint.")
+            return
 
-    elif query.data.startswith("mine_"):
-        await handle_mine_click(update, context)
-
-    elif query.data == "deposit":
-        balance, profit, wins, losses, vip = get_user(user_id)
-        balance += 2000
-        update_user(user_id, balance, profit, wins, losses, vip)
-        await query.edit_message_text(f"💰 Dépôt ajouté\n\nSolde: {balance}", reply_markup=back_menu())
-
-    elif query.data == "vip":
-        balance, profit, wins, losses, vip = get_user(user_id)
-        vip = 1
-        update_user(user_id, balance, profit, wins, losses, vip)
-        await query.edit_message_text("💎 VIP ACTIVÉ", reply_markup=back_menu())
-
-    elif query.data == "stats":
-        balance, profit, wins, losses, vip = get_user(user_id)
-        total = wins + losses
-        rate = (wins / total * 100) if total > 0 else 0
+        mines_count = int(query.data.split("_")[1])
+        games[user_id] = generate_mines(mines_count)
+        user["played"] += 1
 
         await query.edit_message_text(
-            f"📊 STATS\n\n"
-            f"🏦 Bankroll: {balance}\n"
-            f"📈 Profit: {profit}\n"
-            f"🏆 Wins: {wins}\n"
-            f"💥 Losses: {losses}\n"
-            f"📊 Winrate: {round(rate,2)}%",
-            reply_markup=back_menu()
+            "⚡ Jeu LIVE lancé ! Clique une case...",
+            reply_markup=create_grid(False)
         )
 
-# ================= MAIN =================
+    # ==========================
+    # AFFICHAGE STATS
+    # ==========================
+    elif query.data == "stats":
+
+        await query.edit_message_text(
+            f"📊 STATISTIQUES\n\n"
+            f"💰 Solde : {user['balance']} FCFA\n"
+            f"📈 Profit : {user['profit']} FCFA\n"
+            f"🎮 Parties : {user['played']}\n"
+            f"🏆 Victoires : {user['wins']}\n"
+            f"❌ Défaites : {user['losses']}\n"
+            f"🔥 Meilleure série : {user['best_streak']}"
+        )
+
+    # ==========================
+    # REJOUER
+    # ==========================
+    elif query.data == "restart":
+        await start(update, context)
+
+    # ==========================
+    # CLIC SUR CASE
+    # ==========================
+    elif query.data != "locked":
+
+        mines = games.get(user_id)
+        clicked_index = int(query.data)
+
+        await query.edit_message_text("⚡ Révélation LIVE...")
+        await asyncio.sleep(0.5)
+
+        if clicked_index in mines:
+            user["losses"] += 1
+            user["current_streak"] = 0
+            user["balance"] -= BET_AMOUNT
+            user["profit"] -= BET_AMOUNT
+            result_text = "💥 BOOM ! Mine touchée ! -1000 FCFA"
+        else:
+            user["wins"] += 1
+            user["current_streak"] += 1
+
+            if user["current_streak"] > user["best_streak"]:
+                user["best_streak"] = user["current_streak"]
+
+            user["balance"] += BET_AMOUNT
+            user["profit"] += BET_AMOUNT
+            result_text = "🎉 SAFE ! +1000 FCFA"
+
+        await query.edit_message_text(
+            result_text,
+            reply_markup=create_grid(True, mines)
+        )
+
+# ==============================
+# LANCEMENT BOT
+# ==============================
+
 def main():
-    if not TOKEN:
-        print("BOT_TOKEN non défini")
-        return
+    app = ApplicationBuilder().token("MET_TON_TOKEN_ICI").build()
 
-    app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CallbackQueryHandler(button))
 
-    print("BOT LANCÉ 🚀")
-    app.run_polling(drop_pending_updates=True)
+    print("Bot Mines 5x5 LIVE démarré...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
