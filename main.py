@@ -5,7 +5,6 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# 🔐 TOKEN récupéré depuis Railway Variables
 TOKEN = os.getenv("BOT_TOKEN")
 
 # ================= DATABASE =================
@@ -49,7 +48,7 @@ def update_user(user_id, balance, profit, wins, losses, vip):
 def menu_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Crash IA", callback_data="crash")],
-        [InlineKeyboardButton("💣 Mines 5x5", callback_data="mines")],
+        [InlineKeyboardButton("💣 Mines 5x5 PRO", callback_data="mines")],
         [InlineKeyboardButton("💰 Dépôt +2000", callback_data="deposit")],
         [InlineKeyboardButton("💎 Activer VIP", callback_data="vip")],
         [InlineKeyboardButton("📊 Stats", callback_data="stats")]
@@ -119,35 +118,92 @@ async def crash_game(message, user_id):
         reply_markup=back_menu()
     )
 
-# ================= MINES =================
-async def mines_game(message, user_id):
+# ================= MINES PRO =================
+def generate_grid(revealed, mine_pos):
+    keyboard = []
+    for i in range(25):
+        if i in revealed:
+            if i == mine_pos:
+                text = "💣"
+            else:
+                text = "💎"
+        else:
+            text = "⬜"
+        keyboard.append(InlineKeyboardButton(text, callback_data=f"mine_{i}"))
+
+    rows = [keyboard[i:i+5] for i in range(0, 25, 5)]
+    rows.append([InlineKeyboardButton("💰 CASHOUT", callback_data="cashout")])
+    return InlineKeyboardMarkup(rows)
+
+async def start_mines(update, context):
+    query = update.callback_query
+    user_id = query.from_user.id
+
     balance, profit, wins, losses, vip = get_user(user_id)
     bet = 500
 
     if balance < bet:
-        await message.edit_text("❌ Solde insuffisant", reply_markup=back_menu())
+        await query.edit_message_text("❌ Solde insuffisant", reply_markup=back_menu())
         return
 
-    mine_position = random.randint(1, 25)
-    pick = random.randint(1, 25)
+    context.user_data["mine_pos"] = random.randint(0, 24)
+    context.user_data["revealed"] = []
+    context.user_data["bet"] = bet
+    context.user_data["multi"] = 1.0
 
-    if pick == mine_position:
-        balance -= bet
-        profit -= bet
-        losses += 1
-        result = "💣 BOOM ! Mine touchée"
-    else:
-        gain = bet
+    await query.edit_message_text(
+        "💣 MINES 5x5 PRO\nChoisis une case 👇",
+        reply_markup=generate_grid([], context.user_data["mine_pos"])
+    )
+
+async def handle_mine_click(update, context):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
+
+    balance, profit, wins, losses, vip = get_user(user_id)
+    mine_pos = context.user_data.get("mine_pos")
+    revealed = context.user_data.get("revealed", [])
+    bet = context.user_data.get("bet")
+    multi = context.user_data.get("multi")
+
+    if data == "cashout":
+        gain = int(bet * multi)
         balance += gain
         profit += gain
         wins += 1
-        result = "💎 Case sécurisée → Gain"
+        update_user(user_id, balance, profit, wins, losses, vip)
 
-    update_user(user_id, balance, profit, wins, losses, vip)
+        await query.edit_message_text(
+            f"💰 CASHOUT !\nGain: {gain}\nSolde: {balance}",
+            reply_markup=back_menu()
+        )
+        return
 
-    await message.edit_text(
-        f"{result}\n\n💰 Solde: {balance}",
-        reply_markup=back_menu()
+    pos = int(data.split("_")[1])
+
+    if pos == mine_pos:
+        balance -= bet
+        profit -= bet
+        losses += 1
+        update_user(user_id, balance, profit, wins, losses, vip)
+
+        revealed.append(pos)
+
+        await query.edit_message_text(
+            "💣 BOOM ! Mine touchée !",
+            reply_markup=generate_grid(revealed, mine_pos)
+        )
+        return
+
+    if pos not in revealed:
+        revealed.append(pos)
+        multi += 0.4
+        context.user_data["multi"] = multi
+
+    await query.edit_message_text(
+        f"💎 Safe ! Multiplicateur: {round(multi,2)}x",
+        reply_markup=generate_grid(revealed, mine_pos)
     )
 
 # ================= HANDLER =================
@@ -164,8 +220,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await crash_game(msg, user_id)
 
     elif query.data == "mines":
-        msg = await query.edit_message_text("💣 Mines en cours...")
-        await mines_game(msg, user_id)
+        await start_mines(update, context)
+
+    elif query.data.startswith("mine_") or query.data == "cashout":
+        await handle_mine_click(update, context)
 
     elif query.data == "deposit":
         balance, profit, wins, losses, vip = get_user(user_id)
@@ -177,7 +235,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         balance, profit, wins, losses, vip = get_user(user_id)
         vip = 1
         update_user(user_id, balance, profit, wins, losses, vip)
-        await query.edit_message_text("💎 VIP ACTIVÉ (Auto 2.0x)", reply_markup=back_menu())
+        await query.edit_message_text("💎 VIP ACTIVÉ (Crash Auto 2.0x)", reply_markup=back_menu())
 
     elif query.data == "stats":
         balance, profit, wins, losses, vip = get_user(user_id)
