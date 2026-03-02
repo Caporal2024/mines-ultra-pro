@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # =============================
-# 🔐 TOKEN VIA RAILWAY VARIABLE
+# TOKEN VIA VARIABLE RAILWAY
 # =============================
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -13,78 +13,50 @@ if not TOKEN:
     raise ValueError("BOT_TOKEN non défini dans Railway Variables")
 
 # =============================
-# ⚙ CONFIG
+# CONFIG
 # =============================
-LOSS_LIMIT = -3000
-PROFIT_TARGET = 4000
+BASE_BALANCE = 10000
 BASE_BET = 500
-IA_MODE = True
 
 user_sessions = {}
 
+# =============================
+# INIT USER
+# =============================
+def init_user(user_id):
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {
+            "balance": BASE_BALANCE,
+            "history": []
+        }
 
 # =============================
-# 🎛 MENU KEYBOARD GLOBAL
+# MENU KEYBOARD
 # =============================
-def get_menu_keyboard():
+def menu_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎮 Jouer", callback_data="play")],
         [InlineKeyboardButton("📊 Stats", callback_data="stats")],
         [InlineKeyboardButton("📜 Historique", callback_data="history")]
     ])
 
+def back_to_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 MENU", callback_data="menu")]
+    ])
 
 # =============================
-# 👤 INIT USER
-# =============================
-def init_user(user_id):
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {
-            "balance": 10000,
-            "cycle_profit": 0,
-            "wins": 0,
-            "losses": 0,
-            "history": [],
-            "current_bet": BASE_BET
-        }
-
-
-def reset_cycle(user_id):
-    user_sessions[user_id]["cycle_profit"] = 0
-    user_sessions[user_id]["wins"] = 0
-    user_sessions[user_id]["losses"] = 0
-
-
-async def check_cycle(message, user_id):
-    session = user_sessions[user_id]
-
-    if session["cycle_profit"] <= LOSS_LIMIT:
-        await message.reply_text(
-            "🛑 Limite perte atteinte. Nouveau cycle.",
-            reply_markup=get_menu_keyboard()
-        )
-        reset_cycle(user_id)
-
-    elif session["cycle_profit"] >= PROFIT_TARGET:
-        await message.reply_text(
-            "🎯 Objectif atteint. Nouveau cycle.",
-            reply_markup=get_menu_keyboard()
-        )
-        reset_cycle(user_id)
-
-
-# =============================
-# 🚀 START / MENU
+# START
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "💎 MINES ULTRA PRO\n\n🤖 Mode IA Activé",
-        reply_markup=get_menu_keyboard()
+        "💎 *CRASH PRO MAX*\n\nClique MENU 👇",
+        parse_mode="Markdown",
+        reply_markup=back_to_menu()
     )
 
-
 # =============================
-# 🎮 BUTTON HANDLER
+# BUTTON HANDLER
 # =============================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -94,97 +66,72 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_user(user_id)
     session = user_sessions[user_id]
 
+    # ================= MENU =================
+    if query.data == "menu":
+        await query.edit_message_text(
+            "💎 *CRASH PRO MAX*\n\nChoisis une action 👇",
+            parse_mode="Markdown",
+            reply_markup=menu_keyboard()
+        )
+
     # ================= PLAY =================
-    if query.data == "play":
-
-        bet = session["current_bet"] if IA_MODE else BASE_BET
-
-        if bet > session["balance"]:
-            await query.edit_message_text(
-                "❌ Solde insuffisant.",
-                reply_markup=get_menu_keyboard()
-            )
-            return
+    elif query.data == "play":
 
         multiplier = round(random.uniform(1.0, 7.0), 2)
 
-        message = await query.edit_message_text(
-            "🚀 1.00x",
-            reply_markup=get_menu_keyboard()
-        )
+        message = await query.edit_message_text("🚀 1.00x")
 
-        # 🔥 LIVE STABLE LIMITÉ (ANTI-FLOOD)
         live = 1.0
-        steps = min(int((multiplier - 1) / 0.5), 6)
+        steps = min(int((multiplier - 1) / 0.4), 7)
 
         for _ in range(steps):
-            await asyncio.sleep(0.5)
-            live += 0.5
+            await asyncio.sleep(0.4)
+            live += 0.4
             try:
-                await message.edit_text(
-                    f"🚀 {round(live,2)}x",
-                    reply_markup=get_menu_keyboard()
-                )
+                await message.edit_text(f"🚀 {round(live,2)}x")
             except:
                 break
 
-        await asyncio.sleep(0.5)
-
-        # ================= RESULTAT =================
-        if multiplier >= 2:
-            gain = bet
-            session["balance"] += gain
-            session["cycle_profit"] += gain
-            session["wins"] += 1
-            result = f"🚀 Gain: {gain} FCFA"
-        else:
-            session["balance"] -= bet
-            session["cycle_profit"] -= bet
-            session["losses"] += 1
-            result = f"💥 Perte: {bet} FCFA"
+        await asyncio.sleep(0.6)
 
         session["history"].insert(0, f"{multiplier}x")
+        hist = " | ".join(session["history"][:4])
 
-        # 🤖 IA LOGIC
-        if IA_MODE:
-            if multiplier >= 2:
-                session["current_bet"] = BASE_BET
-            else:
-                session["current_bet"] = int(session["current_bet"] * 1.4)
-                if session["current_bet"] > session["balance"] * 0.3:
-                    session["current_bet"] = BASE_BET
-
-        await message.edit_text(
-            f"{result}\n\n"
-            f"💰 Solde: {session['balance']} FCFA\n"
-            f"🤖 Prochaine mise: {session['current_bet']} FCFA",
-            reply_markup=get_menu_keyboard()
+        final_text = (
+            "━━━━━━━━━━━━━━━\n"
+            f"💥 *CRASH à {multiplier}x*\n"
+            "━━━━━━━━━━━━━━━\n\n"
+            "📜 *Historique*\n"
+            f"{hist if hist else 'Aucun'}\n\n"
+            "━━━━━━━━━━━━━━━"
         )
 
-        await check_cycle(message, user_id)
+        await message.edit_text(
+            final_text,
+            parse_mode="Markdown",
+            reply_markup=back_to_menu()
+        )
 
     # ================= STATS =================
     elif query.data == "stats":
         await query.edit_message_text(
-            f"📊 STATISTIQUES\n\n"
-            f"💰 Solde: {session['balance']} FCFA\n"
-            f"📈 Cycle: {session['cycle_profit']} FCFA\n"
-            f"✅ Wins: {session['wins']}\n"
-            f"❌ Losses: {session['losses']}",
-            reply_markup=get_menu_keyboard()
+            f"📊 *STATISTIQUES*\n\n"
+            f"💰 Solde: {session['balance']} FCFA",
+            parse_mode="Markdown",
+            reply_markup=back_to_menu()
         )
 
-    # ================= HISTORIQUE =================
+    # ================= HISTORY =================
     elif query.data == "history":
-        hist = " | ".join(session["history"][:5])
+        hist = " | ".join(session["history"][:6])
         await query.edit_message_text(
-            f"📜 Historique:\n\n{hist if hist else 'Aucun historique.'}",
-            reply_markup=get_menu_keyboard()
+            f"📜 *Historique*\n\n{hist if hist else 'Aucun historique.'}",
+            parse_mode="Markdown",
+            reply_markup=back_to_menu()
         )
-
 
 # =============================
-# 🚀 MAIN
+# MAIN
 # =============================
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -194,7 +141,6 @@ def main():
 
     print("Bot lancé 🚀")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
