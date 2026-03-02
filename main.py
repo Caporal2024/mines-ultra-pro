@@ -1,202 +1,217 @@
-import os
-import json
 import random
-import asyncio
+import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
-TOKEN = os.getenv("BOT_TOKEN")
-DATA_FILE = "data.json"
+# ==============================
+# 🔐 COLLE TON TOKEN ICI
+# ==============================
+TOKEN = "COLLE_TON_TOKEN_ICI"
 
-# ================= LOAD / SAVE =================
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump(users, f)
-
-users = load_data()
-
-# ================= GAME STATE =================
-
-current_round = {
-    "running": False,
-    "multiplier": 1.0,
-    "crash_point": 0,
-    "players": {}
-}
-
-crash_history = []
-
+# ==============================
+# 💰 CONFIG BANKROLL
+# ==============================
 LOSS_LIMIT = -3000
 PROFIT_TARGET = 4000
 
-# ================= START =================
+# ==============================
+# 🤖 MODE IA
+# ==============================
+BASE_BET = 500
+IA_MODE = True
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
+# ==============================
+# 📦 STOCKAGE SESSION
+# ==============================
+user_sessions = {}
 
-    if user_id not in users:
-        users[user_id] = {
+
+# ==============================
+# 🔄 INITIALISATION JOUEUR
+# ==============================
+def init_user(user_id):
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {
             "balance": 10000,
+            "cycle_profit": 0,
             "wins": 0,
             "losses": 0,
-            "profit": 0
+            "history": [],
+            "current_bet": BASE_BET
         }
-        save_data()
+
+
+# ==============================
+# 🔄 RESET CYCLE
+# ==============================
+def reset_cycle(user_id):
+    user_sessions[user_id]["cycle_profit"] = 0
+    user_sessions[user_id]["wins"] = 0
+    user_sessions[user_id]["losses"] = 0
+
+
+# ==============================
+# 🔎 CHECK AUTO-CYCLE
+# ==============================
+async def check_cycle(update: Update, user_id):
+    session = user_sessions[user_id]
+
+    if session["cycle_profit"] <= LOSS_LIMIT:
+        await update.effective_message.reply_text(
+            f"🛑 Cycle terminé !\n\n"
+            f"📉 Perte: {session['cycle_profit']} FCFA\n"
+            f"✅ Wins: {session['wins']}\n"
+            f"❌ Losses: {session['losses']}\n\n"
+            "🔄 Nouveau cycle démarré 🚀"
+        )
+        reset_cycle(user_id)
+
+    elif session["cycle_profit"] >= PROFIT_TARGET:
+        await update.effective_message.reply_text(
+            f"🎯 Objectif atteint !\n\n"
+            f"📈 Profit: +{session['cycle_profit']} FCFA\n"
+            f"✅ Wins: {session['wins']}\n"
+            f"❌ Losses: {session['losses']}\n\n"
+            "🔄 Nouveau cycle démarré 🚀"
+        )
+        reset_cycle(user_id)
+
+
+# ==============================
+# 🎮 MENU PRINCIPAL
+# ==============================
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🎮 Jouer", callback_data="play")],
+        [InlineKeyboardButton("📊 Stats", callback_data="stats")],
+        [InlineKeyboardButton("📜 Historique", callback_data="history")]
+    ]
 
     await update.message.reply_text(
-        "🎮 CRASH PRO SIMULATION\n\n"
-        f"💰 Solde: {users[user_id]['balance']} FCFA\n\n"
-        "Commandes:\n"
-        "/play 500\n"
-        "/stats\n"
-        "/history"
+        "💎 MINES 5x5 PRO MAX\n\n"
+        "🎰 Mode IA Activé\n"
+        "Choisis une action 👇",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ================= PLAY =================
 
-async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-
-    if len(context.args) == 0:
-        await update.message.reply_text("Utilise: /play montant")
-        return
-
-    bet = int(context.args[0])
-
-    if users[user_id]["balance"] < bet:
-        await update.message.reply_text("❌ Solde insuffisant.")
-        return
-
-    if users[user_id]["profit"] <= LOSS_LIMIT:
-        await update.message.reply_text("🛑 Limite de perte atteinte.")
-        return
-
-    if users[user_id]["profit"] >= PROFIT_TARGET:
-        await update.message.reply_text("🎯 Objectif de profit atteint.")
-        return
-
-    users[user_id]["balance"] -= bet
-    users[user_id]["profit"] -= bet
-
-    current_round["players"][user_id] = bet
-
-    if not current_round["running"]:
-        current_round["running"] = True
-        current_round["multiplier"] = 1.0
-        current_round["crash_point"] = round(random.expovariate(1/2), 2)
-        context.application.create_task(run_round(update))
-
-    save_data()
-    await update.message.reply_text("✅ Pari enregistré.")
-
-# ================= RUN ROUND =================
-
-async def run_round(update):
-    message = await update.message.reply_text("🚀 1.00x")
-
-    while current_round["multiplier"] < current_round["crash_point"]:
-        await asyncio.sleep(0.5)
-
-        current_round["multiplier"] *= 1.08
-
-        keyboard = [[InlineKeyboardButton("💜 CASHOUT", callback_data="cashout")]]
-
-        try:
-            await message.edit_text(
-                f"🚀 <b>{current_round['multiplier']:.2f}x</b>",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="HTML"
-            )
-        except:
-            pass
-
-    crash_value = round(current_round["crash_point"], 2)
-
-    crash_history.insert(0, crash_value)
-    if len(crash_history) > 15:
-        crash_history.pop()
-
-    await message.edit_text(
-        f"💥 CRASH à {crash_value}x\n\n"
-        f"📜 Historique:\n"
-        + " | ".join([f"{x}x" for x in crash_history])
-    )
-
-    for user_id in list(current_round["players"].keys()):
-        users[user_id]["losses"] += 1
-
-    current_round["players"].clear()
-    current_round["running"] = False
-    save_data()
-
-    await asyncio.sleep(60)
-
-# ================= CASHOUT =================
-
-async def cashout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==============================
+# 🎛 GESTION BOUTONS
+# ==============================
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_id = str(query.from_user.id)
+    await query.answer()
 
-    if user_id not in current_round["players"]:
-        await query.answer("Pas dans le round.")
-        return
+    user_id = query.from_user.id
+    init_user(user_id)
+    session = user_sessions[user_id]
 
-    bet = current_round["players"].pop(user_id)
-    gain = int(bet * current_round["multiplier"])
+    # =========================
+    # 🎮 JOUER
+    # =========================
+    if query.data == "play":
 
-    users[user_id]["balance"] += gain
-    users[user_id]["profit"] += gain
-    users[user_id]["wins"] += 1
+        if IA_MODE:
+            bet = session["current_bet"]
+        else:
+            bet = BASE_BET
 
-    save_data()
-    await query.answer(f"💰 +{gain} FCFA")
+        if bet > session["balance"]:
+            await query.edit_message_text("❌ Solde insuffisant.")
+            return
 
-# ================= STATS =================
+        multiplier = round(random.uniform(1.0, 7.0), 2)
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    data = users[user_id]
+        # 🎬 Animation Live
+        live = 1.00
+        message = await query.edit_message_text("🚀 1.00x")
 
-    await update.message.reply_text(
-        "📊 STATS\n\n"
-        f"💰 Solde: {data['balance']}\n"
-        f"📈 Profit: {data['profit']}\n"
-        f"✅ Wins: {data['wins']}\n"
-        f"❌ Losses: {data['losses']}"
-    )
+        while live < multiplier:
+            await asyncio_sleep(0.3)
+            live += 0.25
+            await message.edit_text(f"🚀 {round(live,2)}x")
 
-# ================= HISTORY =================
+        await message.edit_text(f"💥 CRASH à {multiplier}x")
 
-async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not crash_history:
-        await update.message.reply_text("Aucun historique.")
-        return
+        # 🎯 Résultat
+        if multiplier >= 2:
+            gain = bet
+            session["balance"] += gain
+            session["cycle_profit"] += gain
+            session["wins"] += 1
+            result = f"🚀 CASHOUT\n💰 Gain: {gain} FCFA"
+        else:
+            session["balance"] -= bet
+            session["cycle_profit"] -= bet
+            session["losses"] += 1
+            result = f"💥 Perte: {bet} FCFA"
 
-    await update.message.reply_text(
-        "📜 Derniers Crash:\n\n" +
-        " | ".join([f"{x}x" for x in crash_history])
-    )
+        session["history"].insert(0, f"{multiplier}x")
 
-# ================= MAIN =================
+        # 🤖 IA LOGIC
+        if IA_MODE:
+            if multiplier >= 2:
+                session["current_bet"] = BASE_BET
+            else:
+                session["current_bet"] = int(session["current_bet"] * 1.4)
 
+                if session["current_bet"] > session["balance"] * 0.3:
+                    session["current_bet"] = BASE_BET
+
+        await message.edit_text(
+            f"{result}\n\n"
+            f"💰 Solde: {session['balance']} FCFA\n"
+            f"🤖 Prochaine mise IA: {session['current_bet']} FCFA"
+        )
+
+        await check_cycle(update, user_id)
+
+    # =========================
+    # 📊 STATS
+    # =========================
+    elif query.data == "stats":
+        await query.edit_message_text(
+            f"📊 STATISTIQUES\n\n"
+            f"💰 Solde: {session['balance']} FCFA\n"
+            f"📈 Cycle: {session['cycle_profit']} FCFA\n"
+            f"✅ Wins: {session['wins']}\n"
+            f"❌ Losses: {session['losses']}"
+        )
+
+    # =========================
+    # 📜 HISTORIQUE
+    # =========================
+    elif query.data == "history":
+        hist = " | ".join(session["history"][:5])
+        await query.edit_message_text(
+            f"📜 Historique:\n\n{hist if hist else 'Aucun historique.'}"
+        )
+
+
+# ==============================
+# ⏳ ASYNC SLEEP
+# ==============================
+import asyncio
+asyncio_sleep = asyncio.sleep
+
+
+# ==============================
+# 🚀 LANCEMENT BOT
+# ==============================
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("play", play))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("history", history))
-    app.add_handler(CallbackQueryHandler(cashout, pattern="cashout"))
+    app.add_handler(CommandHandler("menu", menu))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("🔥 Crash PRO Simulation lancée")
+    print("Bot lancé 🚀")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
