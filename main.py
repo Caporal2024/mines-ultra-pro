@@ -2,6 +2,10 @@ import logging
 import random
 import asyncio
 import os
+import time
+from io import BytesIO
+import matplotlib.pyplot as plt
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -16,11 +20,10 @@ from telegram.ext import (
     filters
 )
 
-# 🔐 TOKEN récupéré depuis Railway
 TOKEN = os.getenv("TOKEN")
 
 if not TOKEN:
-    raise ValueError("TOKEN manquant. Ajoute la variable TOKEN dans Railway.")
+    raise ValueError("Ajoute TOKEN dans Railway Variables")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,15 +41,16 @@ def get_user(user_id):
             "loss_streak": 0,
             "games": 0,
             "wins": 0,
-            "blocked": False
+            "blocked_until": 0,
+            "history": []
         }
     return users[user_id]
 
 # =========================
-# GÉNÉRATION CRASH
+# CRASH
 # =========================
 def generate_crash():
-    return round(random.uniform(1.2, 6.0), 2)
+    return round(random.uniform(1.2, 7.0), 2)
 
 # =========================
 # MENU
@@ -57,12 +61,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🚀 LANCER", callback_data="play")],
         [InlineKeyboardButton("💰 Mise", callback_data="bet")],
-        [InlineKeyboardButton("📊 Stats", callback_data="stats")]
+        [InlineKeyboardButton("📊 Graphique", callback_data="graph")]
     ]
 
     await update.message.reply_text(
-        f"🎮 LUCKY JET SIMULATOR\nSolde: {user['balance']}",
+        f"💎 LUCKY JET PRO\n\n"
+        f"Solde: {user['balance']} FCFA\n\n"
+        f"🎨 Mode Violet Néon activé",
         reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# =========================
+# SIGNAL AUTO
+# =========================
+async def auto_signal(context: ContextTypes.DEFAULT_TYPE):
+    crash = generate_crash()
+    await context.bot.send_message(
+        chat_id=context.job.chat_id,
+        text=f"📡 SIGNAL AUTO\nProchain crash estimé > {crash}x"
     )
 
 # =========================
@@ -75,8 +91,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "play":
 
-        if user["blocked"]:
-            await query.edit_message_text("🛑 Trop de pertes. Pause activée.")
+        if time.time() < user["blocked_until"]:
+            await query.edit_message_text("🛑 Pause active 60s")
             return
 
         if user["balance"] < user["bet"]:
@@ -85,6 +101,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         crash_point = generate_crash()
         multiplier = 1.0
+        start_time = time.time()
 
         user["balance"] -= user["bet"]
         user["games"] += 1
@@ -94,7 +111,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         msg = await query.edit_message_text(
-            f"🚀 {multiplier}x",
+            f"🚀 {multiplier}x\n⏱️ 0.0s",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -107,11 +124,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         while multiplier < crash_point and active_games[query.from_user.id]["running"]:
             await asyncio.sleep(0.5)
-            multiplier += 0.15
+            multiplier += 0.2
+            elapsed = round(time.time() - start_time, 1)
+
             active_games[query.from_user.id]["multiplier"] = multiplier
 
             await msg.edit_text(
-                f"🚀 {round(multiplier,2)}x",
+                f"🚀 {round(multiplier,2)}x\n⏱️ {elapsed}s",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -119,7 +138,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text(f"💥 CRASH à {crash_point}x")
             user["loss_streak"] += 1
             if user["loss_streak"] >= 3:
-                user["blocked"] = True
+                user["blocked_until"] = time.time() + 60
+                user["loss_streak"] = 0
 
         del active_games[query.from_user.id]
 
@@ -128,30 +148,40 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             game = active_games[query.from_user.id]
             game["running"] = False
             multiplier = game["multiplier"]
-            gain = round(user["bet"] * multiplier)
 
+            gain = round(user["bet"] * multiplier)
             user["balance"] += gain
             user["wins"] += 1
             user["loss_streak"] = 0
+            user["history"].append(user["balance"])
 
             await game["message"].edit_text(
-                f"💰 CASHOUT à {round(multiplier,2)}x\nGain: {gain}"
+                f"💰 CASHOUT à {round(multiplier,2)}x\nGain: {gain}\nSolde: {user['balance']}"
             )
 
     elif query.data == "bet":
         await query.edit_message_text("💰 Envoie le montant de la mise")
 
-    elif query.data == "stats":
-        await query.edit_message_text(
-            f"📊 STATS\n"
-            f"Solde: {user['balance']}\n"
-            f"Parties: {user['games']}\n"
-            f"Victoires: {user['wins']}\n"
-            f"Série pertes: {user['loss_streak']}"
-        )
+    elif query.data == "graph":
+        if not user["history"]:
+            await query.edit_message_text("📊 Pas encore de données")
+            return
+
+        plt.figure()
+        plt.plot(user["history"])
+        plt.title("Performance")
+        plt.xlabel("Parties")
+        plt.ylabel("Balance")
+
+        buffer = BytesIO()
+        plt.savefig(buffer, format="png")
+        buffer.seek(0)
+        plt.close()
+
+        await query.message.reply_photo(photo=buffer)
 
 # =========================
-# MISE PERSONNALISÉE
+# MISE
 # =========================
 async def set_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.message.from_user.id)
@@ -174,7 +204,15 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, set_bet))
 
-    print("Bot lancé...")
+    # Signal automatique toutes les 3 minutes
+    app.job_queue.run_repeating(
+        auto_signal,
+        interval=180,
+        first=10,
+        chat_id=None
+    )
+
+    print("Lucky Jet PRO lancé")
     app.run_polling()
 
 if __name__ == "__main__":
