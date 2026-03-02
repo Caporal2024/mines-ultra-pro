@@ -1,171 +1,128 @@
-import os
-import random
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# =========================
-# CONFIG
-# =========================
+# ==============================
+# 🔐 METS TON TOKEN ICI
+# ==============================
+TOKEN = "MET_TON_TOKEN_ICI"
 
-TOKEN = os.getenv("BOT_TOKEN")  # Token ajouté dans Railway
+# Logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
-users = {}
-
-# =========================
-# MENU PRINCIPAL
-# =========================
-
+# ==============================
+# 🎟 MENU PRINCIPAL
+# ==============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📊 Analyse du Jour", callback_data="analyse")],
-        [InlineKeyboardButton("💰 Définir Budget", callback_data="set_budget")],
-        [InlineKeyboardButton("📈 Statistiques", callback_data="stats")],
-        [InlineKeyboardButton("🔄 Reset Session", callback_data="reset")]
+        [InlineKeyboardButton("🎟 Coupon du jour", callback_data="coupon")],
+        [InlineKeyboardButton("📊 Historique", callback_data="historique")],
+        [InlineKeyboardButton("💎 VIP", callback_data="vip")],
+        [InlineKeyboardButton("⚙️ Menu", callback_data="menu")]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "💎 BOT PARIS PRO MAX 💎\n\nChoisis une option :",
+        "🔥 BIENVENUE SUR TON BOT PREMIUM 🔥\n\nChoisis une option :",
         reply_markup=reply_markup
     )
 
-# =========================
-# ANALYSE SIMPLIFIÉE
-# =========================
-
-def generate_suggestions():
-    matchs = [
-        "Arsenal vs Brighton",
-        "Inter vs Lazio",
-        "Real Madrid vs Sevilla",
-        "Bayern vs Frankfurt",
-        "PSG vs Lyon"
-    ]
-
-    markets = [
-        "Double Chance 1X",
-        "Over 1.5 buts",
-        "Under 3.5 buts",
-        "Draw No Bet"
-    ]
-
-    suggestions = []
-    selected = random.sample(matchs, 2)
-
-    for match in selected:
-        market = random.choice(markets)
-        confidence = random.randint(65, 80)
-        suggestions.append(
-            f"{match}\n✔ {market}\nConfiance : {confidence}%\n"
-        )
-
-    return "\n".join(suggestions)
-
-# =========================
-# CALLBACKS
-# =========================
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==============================
+# 🎟 COUPON
+# ==============================
+async def coupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
+    message = """
+━━━━━━━━━━━━━━
+🎟 INFORMATIONS SUR LE PARI
+━━━━━━━━━━━━━━
 
-    if user_id not in users:
-        users[user_id] = {
-            "budget": 0,
-            "played": 0,
-            "wins": 0,
-            "losses": 0
-        }
+🏆 Ligue des Champions
 
-    if query.data == "analyse":
-        users[user_id]["played"] += 1
-        suggestions = generate_suggestions()
+⚽ Atlético Madrid vs Club Bruges
+📊 Total tirs : +23.5
 
-        await query.edit_message_text(
-            f"🎯 Suggestions du Jour\n\n{suggestions}\n⚠ Discipline obligatoire. Pas de garantie."
-        )
+⚽ Bayer Leverkusen vs Olympiacos
+📊 Total tirs : +24.5
 
-    elif query.data == "set_budget":
-        await query.edit_message_text(
-            "💰 Envoie ton budget comme ceci :\n/budget 20000"
-        )
+⚽ Inter Milan vs Bodo/Glimt
+📊 Total tirs : +29.5
 
-    elif query.data == "stats":
-        data = users[user_id]
-        await query.edit_message_text(
-            f"📈 Statistiques\n\n"
-            f"Budget: {data['budget']} FCFA\n"
-            f"Tickets joués: {data['played']}\n"
-            f"Gains: {data['wins']}\n"
-            f"Pertes: {data['losses']}"
-        )
+━━━━━━━━━━━━━━
+💰 Cote totale : 3.76
+━━━━━━━━━━━━━━
 
-    elif query.data == "reset":
-        users[user_id] = {
-            "budget": 0,
-            "played": 0,
-            "wins": 0,
-            "losses": 0
-        }
-        await query.edit_message_text("🔄 Session réinitialisée.")
+⚠ Analyse basée sur statistiques
+"""
 
-# =========================
-# BUDGET COMMAND
-# =========================
+    keyboard = [
+        [InlineKeyboardButton("🔄 Nouveau coupon", callback_data="coupon")],
+        [InlineKeyboardButton("🏠 Retour menu", callback_data="menu")]
+    ]
 
-async def budget(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if len(context.args) == 0:
-        await update.message.reply_text("Usage: /budget 20000")
-        return
+    await query.edit_message_text(message, reply_markup=reply_markup)
 
-    try:
-        amount = int(context.args[0])
-    except:
-        await update.message.reply_text("Montant invalide.")
-        return
+# ==============================
+# 📊 HISTORIQUE
+# ==============================
+async def historique(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-    if user_id not in users:
-        users[user_id] = {
-            "budget": 0,
-            "played": 0,
-            "wins": 0,
-            "losses": 0
-        }
-
-    users[user_id]["budget"] = amount
-
-    stake = int(amount * 0.05)
-    stop_loss = int(amount * 0.20)
-    target = int(amount * 0.30)
-
-    await update.message.reply_text(
-        f"💰 Budget enregistré : {amount} FCFA\n\n"
-        f"Mise conseillée : {stake} FCFA\n"
-        f"Stop Loss : -{stop_loss} FCFA\n"
-        f"Objectif : +{target} FCFA"
+    await query.edit_message_text(
+        "📊 Historique bientôt disponible.\n\n🏠 Clique sur /start pour revenir au menu."
     )
 
-# =========================
-# MAIN
-# =========================
+# ==============================
+# 💎 VIP
+# ==============================
+async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-def main():
-    if not TOKEN:
-        raise ValueError("BOT_TOKEN non défini dans Railway.")
+    await query.edit_message_text(
+        "💎 Espace VIP\n\nContacte l'administrateur pour plus d'informations."
+    )
 
+# ==============================
+# ⚙️ MENU
+# ==============================
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [InlineKeyboardButton("🎟 Coupon du jour", callback_data="coupon")],
+        [InlineKeyboardButton("📊 Historique", callback_data="historique")],
+        [InlineKeyboardButton("💎 VIP", callback_data="vip")]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        "🏠 MENU PRINCIPAL\n\nChoisis une option :",
+        reply_markup=reply_markup
+    )
+
+# ==============================
+# 🚀 LANCEMENT BOT
+# ==============================
+if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("budget", budget))
-    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(CallbackQueryHandler(coupon, pattern="coupon"))
+    app.add_handler(CallbackQueryHandler(historique, pattern="historique"))
+    app.add_handler(CallbackQueryHandler(vip, pattern="vip"))
+    app.add_handler(CallbackQueryHandler(menu, pattern="menu"))
 
-    print("Bot lancé...")
+    print("Bot en cours...")
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
