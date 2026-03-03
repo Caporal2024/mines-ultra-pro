@@ -4,14 +4,11 @@ from telebot import types
 from flask import Flask
 import threading
 import random
-import time
 import sqlite3
-from datetime import datetime, timedelta
 
-# ================= TOKEN =================
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
-    raise Exception("TOKEN manquant dans Railway")
+    raise Exception("TOKEN manquant")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -22,40 +19,13 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
-    balance INTEGER DEFAULT 1000,
-    games INTEGER DEFAULT 0,
-    total_won INTEGER DEFAULT 0,
-    last_bonus TEXT
+    balance INTEGER DEFAULT 1000
 )
 """)
 conn.commit()
 
-active_rounds = {}
-
-# ================= LIVE SYSTEM =================
-live_history = []
-current_round = {"active": False, "multiplier": 1.0, "crash": 0}
-
-def live_loop():
-    global current_round
-
-    while True:
-        time.sleep(5)
-
-        crash = round(random.uniform(1.5, 6.0), 2)
-        current_round = {"active": True, "multiplier": 1.0, "crash": crash}
-
-        while current_round["multiplier"] < crash:
-            time.sleep(1)
-            current_round["multiplier"] += round(random.uniform(0.1, 0.4), 2)
-
-        current_round["active"] = False
-
-        live_history.insert(0, crash)
-        if len(live_history) > 10:
-            live_history.pop()
-
-threading.Thread(target=live_loop, daemon=True).start()
+games = {}
+ADMIN_ID = 123456789  # ← Mets ton ID Telegram ici
 
 # ================= UTIL =================
 def get_user(user_id):
@@ -73,55 +43,23 @@ def update_balance(user_id, amount):
     cursor.execute("UPDATE users SET balance=? WHERE user_id=?", (amount, user_id))
     conn.commit()
 
-def update_stats(user_id, gain):
-    cursor.execute("""
-    UPDATE users
-    SET games = games + 1,
-        total_won = total_won + ?
-    WHERE user_id=?
-    """, (gain, user_id))
-    conn.commit()
-
 # ================= START =================
 @bot.message_handler(commands=['start'])
 def start(message):
     user = get_user(message.from_user.id)
 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🚀 PLAY")
-    markup.add("💰 BALANCE", "📊 STATS")
-    markup.add("🏆 LEADERBOARD", "🎁 BONUS")
-    markup.add("📡 LIVE")
+    markup.add("🎮 MINES 5x5")
+    markup.add("💰 BALANCE")
+
+    if message.from_user.id == ADMIN_ID:
+        markup.add("🛡 QG")
 
     bot.send_message(
         message.chat.id,
-        f"🎮 MINES 5x5 PRO MAX 💎\n\n💎 Points: {user[1]}",
+        f"🎰 MINES 5x5 PRO MAX 💎\n\n💰 Solde: {user[1]} pts",
         reply_markup=markup
     )
-
-# ================= BONUS =================
-@bot.message_handler(func=lambda m: m.text == "🎁 BONUS")
-def bonus(message):
-    user = get_user(message.from_user.id)
-    last_bonus = user[4]
-    now = datetime.now()
-
-    if last_bonus:
-        last_time = datetime.fromisoformat(last_bonus)
-        if now - last_time < timedelta(hours=24):
-            bot.send_message(message.chat.id, "⏳ Bonus déjà pris aujourd'hui.")
-            return
-
-    bonus_amount = 500
-    new_balance = user[1] + bonus_amount
-
-    cursor.execute("""
-    UPDATE users SET balance=?, last_bonus=?
-    WHERE user_id=?
-    """, (new_balance, now.isoformat(), message.from_user.id))
-    conn.commit()
-
-    bot.send_message(message.chat.id, f"🎁 +{bonus_amount} pts ajoutés !")
 
 # ================= BALANCE =================
 @bot.message_handler(func=lambda m: m.text == "💰 BALANCE")
@@ -129,148 +67,126 @@ def balance(message):
     user = get_user(message.from_user.id)
     bot.send_message(message.chat.id, f"💰 Solde: {user[1]} pts")
 
-# ================= STATS =================
-@bot.message_handler(func=lambda m: m.text == "📊 STATS")
-def stats(message):
-    user = get_user(message.from_user.id)
-    bot.send_message(
-        message.chat.id,
-        f"📊 Stats\n\n🎮 Parties: {user[2]}\n💰 Total gagné: {user[3]} pts"
-    )
-
-# ================= LEADERBOARD =================
-@bot.message_handler(func=lambda m: m.text == "🏆 LEADERBOARD")
-def leaderboard(message):
-    cursor.execute("SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 5")
-    top = cursor.fetchall()
-
-    text = "🏆 TOP 5\n\n"
-    for i, user in enumerate(top):
-        text += f"{i+1}. ID {user[0]} — {user[1]} pts\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ================= LIVE =================
-@bot.message_handler(func=lambda m: m.text == "📡 LIVE")
-def live(message):
-    text = "📡 LIVE MODE\n\n"
-
-    if current_round["active"]:
-        text += f"🚀 En cours : {current_round['multiplier']:.2f}x\n\n"
-
-    text += "🔥 Historique :\n"
-    for x in live_history:
-        text += f"💥 {x}x\n"
-
-    bot.send_message(message.chat.id, text)
-
-# ================= PLAY =================
-@bot.message_handler(func=lambda m: m.text == "🚀 PLAY")
-def play(message):
-    user_id = message.from_user.id
-
-    if user_id in active_rounds:
-        bot.send_message(message.chat.id, "⚠️ Partie déjà en cours.")
-        return
-
-    bot.send_message(message.chat.id, "💎 Entre ta mise :")
-    bot.register_next_step_handler(message, process_bet)
-
-def process_bet(message):
+# ================= START GAME =================
+@bot.message_handler(func=lambda m: m.text == "🎮 MINES 5x5")
+def start_game(message):
     user_id = message.from_user.id
     user = get_user(user_id)
 
-    if not message.text.isdigit():
-        bot.send_message(message.chat.id, "💎 Entre un nombre valide.")
-        bot.register_next_step_handler(message, process_bet)
+    if user[1] < 100:
+        bot.send_message(message.chat.id, "❌ Minimum 100 pts pour jouer.")
         return
 
-    bet = int(message.text)
+    mines = random.sample(range(25), 5)
 
-    if bet <= 0 or bet > user[1]:
-        bot.send_message(message.chat.id, "❌ Mise invalide.")
-        return
-
-    crash = round(random.uniform(1.5, 6.0), 2)
-
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("💸 CASHOUT", callback_data="cashout"))
-
-    msg = bot.send_message(message.chat.id, "🚀 1.00x", reply_markup=markup)
-
-    active_rounds[user_id] = {
-        "bet": bet,
-        "crash": crash,
-        "multiplier": 1.0,
-        "message_id": msg.message_id,
-        "chat_id": message.chat.id,
-        "active": True
+    games[user_id] = {
+        "mines": mines,
+        "revealed": [],
+        "bet": 100,
+        "multiplier": 1.0
     }
 
-    threading.Thread(target=run_game, args=(user_id,), daemon=True).start()
+    update_balance(user_id, user[1] - 100)
 
-def run_game(user_id):
-    round_data = active_rounds[user_id]
+    send_grid(message.chat.id, user_id)
 
-    while round_data["multiplier"] < round_data["crash"]:
-        if not round_data["active"]:
-            return
+# ================= GRID =================
+def send_grid(chat_id, user_id):
+    game = games[user_id]
 
-        time.sleep(0.8)
-        round_data["multiplier"] += round(random.uniform(0.1, 0.4), 2)
+    markup = types.InlineKeyboardMarkup(row_width=5)
 
+    buttons = []
+    for i in range(25):
+        if i in game["revealed"]:
+            buttons.append(types.InlineKeyboardButton("💎", callback_data="x"))
+        else:
+            buttons.append(types.InlineKeyboardButton("⬛", callback_data=f"cell_{i}"))
+
+    markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton("💸 CASHOUT", callback_data="cashout"))
+
+    bot.send_message(chat_id, "🎮 Choisis une case :", reply_markup=markup)
+
+# ================= CLICK =================
+@bot.callback_query_handler(func=lambda call: call.data.startswith("cell_"))
+def click_cell(call):
+    user_id = call.from_user.id
+    index = int(call.data.split("_")[1])
+
+    if user_id not in games:
+        return
+
+    game = games[user_id]
+
+    if index in game["mines"]:
         bot.edit_message_text(
-            f"🚀 {round_data['multiplier']:.2f}x",
-            round_data["chat_id"],
-            round_data["message_id"],
-            reply_markup=types.InlineKeyboardMarkup().add(
-                types.InlineKeyboardButton("💸 CASHOUT", callback_data="cashout")
-            )
+            "💣 BOOM ! Tu as perdu.",
+            call.message.chat.id,
+            call.message.message_id
         )
+        games.pop(user_id)
+        return
 
-    round_data["active"] = False
+    game["revealed"].append(index)
+    game["multiplier"] += 0.5
 
-    user = get_user(user_id)
-    new_balance = user[1] - round_data["bet"]
-    update_balance(user_id, new_balance)
-    update_stats(user_id, 0)
+    markup = types.InlineKeyboardMarkup(row_width=5)
+    buttons = []
 
-    bot.edit_message_text(
-        f"💥 Crash à {round_data['crash']}x\n\n❌ -{round_data['bet']} pts\n\n💰 {new_balance} pts",
-        round_data["chat_id"],
-        round_data["message_id"]
+    for i in range(25):
+        if i in game["revealed"]:
+            buttons.append(types.InlineKeyboardButton("💎", callback_data="x"))
+        else:
+            buttons.append(types.InlineKeyboardButton("⬛", callback_data=f"cell_{i}"))
+
+    markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton(
+        f"💸 CASHOUT x{game['multiplier']}",
+        callback_data="cashout"
+    ))
+
+    bot.edit_message_reply_markup(
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=markup
     )
-
-    del active_rounds[user_id]
 
 # ================= CASHOUT =================
 @bot.callback_query_handler(func=lambda call: call.data == "cashout")
 def cashout(call):
     user_id = call.from_user.id
 
-    if user_id not in active_rounds:
+    if user_id not in games:
         return
 
-    round_data = active_rounds[user_id]
-    if not round_data["active"]:
-        return
-
-    round_data["active"] = False
-
-    gain = int(round_data["bet"] * round_data["multiplier"])
+    game = games[user_id]
     user = get_user(user_id)
-    new_balance = user[1] + gain
 
-    update_balance(user_id, new_balance)
-    update_stats(user_id, gain)
+    gain = int(game["bet"] * game["multiplier"])
+    update_balance(user_id, user[1] + gain)
 
     bot.edit_message_text(
-        f"💸 CASHOUT à {round_data['multiplier']:.2f}x\n\n✅ +{gain} pts\n\n💰 {new_balance} pts",
-        round_data["chat_id"],
-        round_data["message_id"]
+        f"💸 CASHOUT réussi !\n\nGain: {gain} pts",
+        call.message.chat.id,
+        call.message.message_id
     )
 
-    del active_rounds[user_id]
+    games.pop(user_id)
+
+# ================= ADMIN QG =================
+@bot.message_handler(func=lambda m: m.text == "🛡 QG")
+def admin_panel(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+
+    bot.send_message(
+        message.chat.id,
+        f"🛡 QG ADMIN\n\n👥 Utilisateurs: {total_users}"
+    )
 
 # ================= RUN =================
 def run_bot():
