@@ -5,6 +5,7 @@ from flask import Flask
 import threading
 import random
 import sqlite3
+import time
 
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
@@ -25,6 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
 conn.commit()
 
 games = {}
+crash_games = {}
+
 ADMIN_ID = 123456789  # Mets ton ID ici
 
 # ================= UTIL =================
@@ -74,31 +77,90 @@ def balance(message):
     user = get_user(message.from_user.id)
     bot.send_message(message.chat.id, f"💰 Solde: {user[1]} pts")
 
-# ================= JET CRASH =================
+# ================= JET CRASH LIVE =================
 @bot.message_handler(func=lambda m: m.text == "✈️ JET CRASH")
 def jet_crash(message):
     user_id = message.from_user.id
     user = get_user(user_id)
 
-    if user[1] < 100:
+    bet = 100
+
+    if user[1] < bet:
         bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
         return
 
-    crash = round(random.uniform(1.2, 5.0), 2)
+    update_balance(user_id, user[1] - bet)
 
-    update_balance(user_id, user[1] - 100)
+    crash_point = round(random.uniform(1.5, 6.0), 2)
 
-    gain = int(100 * crash)
+    crash_games[user_id] = {
+        "bet": bet,
+        "multiplier": 1.00,
+        "crash_point": crash_point,
+        "active": True
+    }
 
-    update_balance(user_id, get_user(user_id)[1] + gain)
+    msg = bot.send_message(message.chat.id, "✈️ Décollage...\n\nx1.00")
 
-    bot.send_message(
-        message.chat.id,
-        f"✈️ Jet Crash\n\n💥 Crash à x{crash}\n\n💰 Gain: {gain} pts",
-        reply_markup=main_menu(user_id)
+    threading.Thread(
+        target=run_crash,
+        args=(message.chat.id, msg.message_id, user_id),
+        daemon=True
+    ).start()
+
+def run_crash(chat_id, message_id, user_id):
+    while user_id in crash_games and crash_games[user_id]["active"]:
+        game = crash_games[user_id]
+
+        game["multiplier"] += round(random.uniform(0.05, 0.25), 2)
+
+        if game["multiplier"] >= game["crash_point"]:
+            bot.edit_message_text(
+                f"💥 CRASH à x{game['crash_point']}\n\n❌ Perdu.",
+                chat_id,
+                message_id
+            )
+            crash_games.pop(user_id)
+            return
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
+            f"💸 CASHOUT x{round(game['multiplier'],2)}",
+            callback_data="crash_out"
+        ))
+
+        bot.edit_message_text(
+            f"✈️ En vol...\n\nMultiplicateur: x{round(game['multiplier'],2)}",
+            chat_id,
+            message_id,
+            reply_markup=markup
+        )
+
+        time.sleep(1)
+
+@bot.callback_query_handler(func=lambda call: call.data == "crash_out")
+def crash_out(call):
+    user_id = call.from_user.id
+
+    if user_id not in crash_games:
+        return
+
+    game = crash_games[user_id]
+    gain = int(game["bet"] * game["multiplier"])
+
+    user = get_user(user_id)
+    update_balance(user_id, user[1] + gain)
+
+    game["active"] = False
+    crash_games.pop(user_id)
+
+    bot.edit_message_text(
+        f"💸 CASHOUT réussi !\n\nMultiplicateur: x{round(game['multiplier'],2)}\nGain: {gain} pts",
+        call.message.chat.id,
+        call.message.message_id
     )
 
-# ================= ROCKET RISE =================
+# ================= ROCKET RISE (rapide) =================
 @bot.message_handler(func=lambda m: m.text == "🚀 ROCKET RISE")
 def rocket_rise(message):
     user_id = message.from_user.id
@@ -113,7 +175,6 @@ def rocket_rise(message):
     update_balance(user_id, user[1] - 100)
 
     gain = int(100 * crash)
-
     update_balance(user_id, get_user(user_id)[1] + gain)
 
     bot.send_message(
@@ -122,14 +183,14 @@ def rocket_rise(message):
         reply_markup=main_menu(user_id)
     )
 
-# ================= MINES START =================
+# ================= MINES =================
 @bot.message_handler(func=lambda m: m.text == "🎮 MINES 5x5")
 def start_game(message):
     user_id = message.from_user.id
     user = get_user(user_id)
 
     if user[1] < 100:
-        bot.send_message(message.chat.id, "❌ Minimum 100 pts pour jouer.")
+        bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
         return
 
     mines = random.sample(range(25), 5)
@@ -145,7 +206,6 @@ def start_game(message):
 
     send_grid(message.chat.id, user_id)
 
-# ================= GRID =================
 def send_grid(chat_id, user_id):
     game = games[user_id]
 
@@ -159,11 +219,13 @@ def send_grid(chat_id, user_id):
             buttons.append(types.InlineKeyboardButton("⬛", callback_data=f"cell_{i}"))
 
     markup.add(*buttons)
-    markup.add(types.InlineKeyboardButton("💸 CASHOUT", callback_data="cashout"))
+    markup.add(types.InlineKeyboardButton(
+        f"💸 CASHOUT x{game['multiplier']}",
+        callback_data="cashout"
+    ))
 
     bot.send_message(chat_id, "🎮 Choisis une case :", reply_markup=markup)
 
-# ================= CLICK =================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("cell_"))
 def click_cell(call):
     user_id = call.from_user.id
@@ -207,7 +269,6 @@ def click_cell(call):
         reply_markup=markup
     )
 
-# ================= CASHOUT =================
 @bot.callback_query_handler(func=lambda call: call.data == "cashout")
 def cashout(call):
     user_id = call.from_user.id
@@ -216,9 +277,9 @@ def cashout(call):
         return
 
     game = games[user_id]
-    user = get_user(user_id)
-
     gain = int(game["bet"] * game["multiplier"])
+
+    user = get_user(user_id)
     update_balance(user_id, user[1] + gain)
 
     bot.edit_message_text(
