@@ -8,9 +8,10 @@ import time
 import sqlite3
 from datetime import datetime, timedelta
 
+# ================= TOKEN =================
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
-    raise Exception("TOKEN manquant")
+    raise Exception("TOKEN manquant dans Railway")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -94,7 +95,7 @@ def start(message):
 
     bot.send_message(
         message.chat.id,
-        f"🎮 Lucky Jet Fun PRO\n\n💎 Points: {user[1]}",
+        f"🎮 MINES 5x5 PRO MAX 💎\n\n💎 Points: {user[1]}",
         reply_markup=markup
     )
 
@@ -126,7 +127,7 @@ def bonus(message):
 @bot.message_handler(func=lambda m: m.text == "💰 BALANCE")
 def balance(message):
     user = get_user(message.from_user.id)
-    bot.send_message(message.chat.id, f"💎 Points: {user[1]}")
+    bot.send_message(message.chat.id, f"💰 Solde: {user[1]} pts")
 
 # ================= STATS =================
 @bot.message_handler(func=lambda m: m.text == "📊 STATS")
@@ -179,32 +180,34 @@ def process_bet(message):
     user_id = message.from_user.id
     user = get_user(user_id)
 
-    try:
-        bet = int(message.text)
-        if bet <= 0 or bet > user[1]:
-            bot.send_message(message.chat.id, "❌ Mise invalide.")
-            return
+    if not message.text.isdigit():
+        bot.send_message(message.chat.id, "💎 Entre un nombre valide.")
+        bot.register_next_step_handler(message, process_bet)
+        return
 
-        crash = round(random.uniform(1.5, 6.0), 2)
+    bet = int(message.text)
 
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("💸 CASHOUT", callback_data="cashout"))
+    if bet <= 0 or bet > user[1]:
+        bot.send_message(message.chat.id, "❌ Mise invalide.")
+        return
 
-        msg = bot.send_message(message.chat.id, "🚀 1.00x", reply_markup=markup)
+    crash = round(random.uniform(1.5, 6.0), 2)
 
-        active_rounds[user_id] = {
-            "bet": bet,
-            "crash": crash,
-            "multiplier": 1.0,
-            "message_id": msg.message_id,
-            "chat_id": message.chat.id,
-            "active": True
-        }
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("💸 CASHOUT", callback_data="cashout"))
 
-        threading.Thread(target=run_game, args=(user_id,)).start()
+    msg = bot.send_message(message.chat.id, "🚀 1.00x", reply_markup=markup)
 
-    except:
-        bot.send_message(message.chat.id, "❌ Nombre invalide.")
+    active_rounds[user_id] = {
+        "bet": bet,
+        "crash": crash,
+        "multiplier": 1.0,
+        "message_id": msg.message_id,
+        "chat_id": message.chat.id,
+        "active": True
+    }
+
+    threading.Thread(target=run_game, args=(user_id,), daemon=True).start()
 
 def run_game(user_id):
     round_data = active_rounds[user_id]
@@ -233,7 +236,7 @@ def run_game(user_id):
     update_stats(user_id, 0)
 
     bot.edit_message_text(
-        f"💥 Crash à {round_data['crash']}x\n\n❌ -{round_data['bet']} pts\n\n💎 {new_balance} pts",
+        f"💥 Crash à {round_data['crash']}x\n\n❌ -{round_data['bet']} pts\n\n💰 {new_balance} pts",
         round_data["chat_id"],
         round_data["message_id"]
     )
@@ -262,24 +265,24 @@ def cashout(call):
     update_stats(user_id, gain)
 
     bot.edit_message_text(
-        f"💸 CASHOUT à {round_data['multiplier']:.2f}x\n\n✅ +{gain} pts\n\n💎 {new_balance} pts",
+        f"💸 CASHOUT à {round_data['multiplier']:.2f}x\n\n✅ +{gain} pts\n\n💰 {new_balance} pts",
         round_data["chat_id"],
         round_data["message_id"]
     )
 
     del active_rounds[user_id]
 
-# ================= RUN BOT =================
+# ================= RUN =================
 def run_bot():
     bot.infinity_polling()
 
-threading.Thread(target=run_bot).start()
+threading.Thread(target=run_bot, daemon=True).start()
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Lucky Jet Fun PRO Running"
+    return "MINES 5x5 PRO MAX Running"
 
 port = int(os.environ.get("PORT", 5000))
 app.run(host="0.0.0.0", port=port)
