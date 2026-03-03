@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 conn.commit()
 
 games = {}
-ADMIN_ID = 123456789  # ← Mets ton ID Telegram ici
+ADMIN_ID = 123456789  # Mets ton ID ici
 
 # ================= UTIL =================
 def get_user(user_id):
@@ -43,22 +43,29 @@ def update_balance(user_id, amount):
     cursor.execute("UPDATE users SET balance=? WHERE user_id=?", (amount, user_id))
     conn.commit()
 
+# ================= MENU =================
+def main_menu(user_id):
+    user = get_user(user_id)
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🎮 MINES 5x5")
+    markup.add("✈️ JET CRASH", "🚀 ROCKET RISE")
+    markup.add("💰 BALANCE")
+
+    if user_id == ADMIN_ID:
+        markup.add("🛡 QG")
+
+    return markup
+
 # ================= START =================
 @bot.message_handler(commands=['start'])
 def start(message):
     user = get_user(message.from_user.id)
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🎮 MINES 5x5")
-    markup.add("💰 BALANCE")
-
-    if message.from_user.id == ADMIN_ID:
-        markup.add("🛡 QG")
-
     bot.send_message(
         message.chat.id,
-        f"🎰 MINES 5x5 PRO MAX 💎\n\n💰 Solde: {user[1]} pts",
-        reply_markup=markup
+        f"🎰 CASINO PRO MAX 💎\n\n💰 Solde: {user[1]} pts",
+        reply_markup=main_menu(message.from_user.id)
     )
 
 # ================= BALANCE =================
@@ -67,7 +74,55 @@ def balance(message):
     user = get_user(message.from_user.id)
     bot.send_message(message.chat.id, f"💰 Solde: {user[1]} pts")
 
-# ================= START GAME =================
+# ================= JET CRASH =================
+@bot.message_handler(func=lambda m: m.text == "✈️ JET CRASH")
+def jet_crash(message):
+    user_id = message.from_user.id
+    user = get_user(user_id)
+
+    if user[1] < 100:
+        bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
+        return
+
+    crash = round(random.uniform(1.2, 5.0), 2)
+
+    update_balance(user_id, user[1] - 100)
+
+    gain = int(100 * crash)
+
+    update_balance(user_id, get_user(user_id)[1] + gain)
+
+    bot.send_message(
+        message.chat.id,
+        f"✈️ Jet Crash\n\n💥 Crash à x{crash}\n\n💰 Gain: {gain} pts",
+        reply_markup=main_menu(user_id)
+    )
+
+# ================= ROCKET RISE =================
+@bot.message_handler(func=lambda m: m.text == "🚀 ROCKET RISE")
+def rocket_rise(message):
+    user_id = message.from_user.id
+    user = get_user(user_id)
+
+    if user[1] < 100:
+        bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
+        return
+
+    crash = round(random.uniform(1.0, 7.0), 2)
+
+    update_balance(user_id, user[1] - 100)
+
+    gain = int(100 * crash)
+
+    update_balance(user_id, get_user(user_id)[1] + gain)
+
+    bot.send_message(
+        message.chat.id,
+        f"🚀 Rocket Rise\n\n💥 Crash à x{crash}\n\n💰 Gain: {gain} pts",
+        reply_markup=main_menu(user_id)
+    )
+
+# ================= MINES START =================
 @bot.message_handler(func=lambda m: m.text == "🎮 MINES 5x5")
 def start_game(message):
     user_id = message.from_user.id
@@ -95,8 +150,8 @@ def send_grid(chat_id, user_id):
     game = games[user_id]
 
     markup = types.InlineKeyboardMarkup(row_width=5)
-
     buttons = []
+
     for i in range(25):
         if i in game["revealed"]:
             buttons.append(types.InlineKeyboardButton("💎", callback_data="x"))
@@ -174,7 +229,7 @@ def cashout(call):
 
     games.pop(user_id)
 
-# ================= ADMIN QG =================
+# ================= ADMIN =================
 @bot.message_handler(func=lambda m: m.text == "🛡 QG")
 def admin_panel(message):
     if message.from_user.id != ADMIN_ID:
@@ -183,9 +238,12 @@ def admin_panel(message):
     cursor.execute("SELECT COUNT(*) FROM users")
     total_users = cursor.fetchone()[0]
 
+    cursor.execute("SELECT SUM(balance) FROM users")
+    total_balance = cursor.fetchone()[0]
+
     bot.send_message(
         message.chat.id,
-        f"🛡 QG ADMIN\n\n👥 Utilisateurs: {total_users}"
+        f"🛡 QG ADMIN\n\n👥 Utilisateurs: {total_users}\n💰 Total balance: {total_balance}"
     )
 
 # ================= RUN =================
@@ -198,7 +256,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "MINES 5x5 PRO MAX Running"
+    return "CASINO PRO MAX Running"
 
 port = int(os.environ.get("PORT", 5000))
 app.run(host="0.0.0.0", port=port)
