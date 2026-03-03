@@ -20,15 +20,29 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
-    balance INTEGER DEFAULT 1000
+    balance INTEGER DEFAULT 2000
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS crash_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    multiplier REAL
+)
+""")
+
 conn.commit()
 
-games = {}
-crash_games = {}
+ADMIN_ID = 123456789
 
-ADMIN_ID = 123456789  # Mets ton ID ici
+# ================= GLOBAL CRASH =================
+crash_data = {
+    "active": False,
+    "multiplier": 1.0,
+    "crash_point": 0,
+    "players": {},
+    "lock": threading.Lock()
+}
 
 # ================= UTIL =================
 def get_user(user_id):
@@ -48,11 +62,10 @@ def update_balance(user_id, amount):
 
 # ================= MENU =================
 def main_menu(user_id):
-    user = get_user(user_id)
-
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🎮 MINES 5x5")
-    markup.add("✈️ JET CRASH", "🚀 ROCKET RISE")
+    markup.add("✈️ JET CRASH")
+    markup.add("📊 HISTORIQUE")
     markup.add("💰 BALANCE")
 
     if user_id == ADMIN_ID:
@@ -64,10 +77,9 @@ def main_menu(user_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     user = get_user(message.from_user.id)
-
     bot.send_message(
         message.chat.id,
-        f"🎰 CASINO PRO MAX 💎\n\n💰 Solde: {user[1]} pts",
+        f"🎰 CASINO PRO MAX\n\n💰 Solde: {user[1]} pts",
         reply_markup=main_menu(message.from_user.id)
     )
 
@@ -77,218 +89,132 @@ def balance(message):
     user = get_user(message.from_user.id)
     bot.send_message(message.chat.id, f"💰 Solde: {user[1]} pts")
 
-# ================= JET CRASH LIVE =================
+# ================= JOIN GLOBAL CRASH =================
 @bot.message_handler(func=lambda m: m.text == "✈️ JET CRASH")
-def jet_crash(message):
+def join_crash(message):
     user_id = message.from_user.id
     user = get_user(user_id)
 
     bet = 100
 
     if user[1] < bet:
-        bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
+        bot.send_message(message.chat.id, "❌ Solde insuffisant.")
         return
 
-    update_balance(user_id, user[1] - bet)
+    with crash_data["lock"]:
+        if not crash_data["active"]:
+            start_crash_round()
 
-    crash_point = round(random.uniform(1.5, 6.0), 2)
+        update_balance(user_id, user[1] - bet)
 
-    crash_games[user_id] = {
-        "bet": bet,
-        "multiplier": 1.00,
-        "crash_point": crash_point,
-        "active": True
-    }
-
-    msg = bot.send_message(message.chat.id, "✈️ Décollage...\n\nx1.00")
-
-    threading.Thread(
-        target=run_crash,
-        args=(message.chat.id, msg.message_id, user_id),
-        daemon=True
-    ).start()
-
-def run_crash(chat_id, message_id, user_id):
-    while user_id in crash_games and crash_games[user_id]["active"]:
-        game = crash_games[user_id]
-
-        game["multiplier"] += round(random.uniform(0.05, 0.25), 2)
-
-        if game["multiplier"] >= game["crash_point"]:
-            bot.edit_message_text(
-                f"💥 CRASH à x{game['crash_point']}\n\n❌ Perdu.",
-                chat_id,
-                message_id
-            )
-            crash_games.pop(user_id)
-            return
-
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(
-            f"💸 CASHOUT x{round(game['multiplier'],2)}",
-            callback_data="crash_out"
-        ))
-
-        bot.edit_message_text(
-            f"✈️ En vol...\n\nMultiplicateur: x{round(game['multiplier'],2)}",
-            chat_id,
-            message_id,
-            reply_markup=markup
-        )
-
-        time.sleep(1)
-
-@bot.callback_query_handler(func=lambda call: call.data == "crash_out")
-def crash_out(call):
-    user_id = call.from_user.id
-
-    if user_id not in crash_games:
-        return
-
-    game = crash_games[user_id]
-    gain = int(game["bet"] * game["multiplier"])
-
-    user = get_user(user_id)
-    update_balance(user_id, user[1] + gain)
-
-    game["active"] = False
-    crash_games.pop(user_id)
-
-    bot.edit_message_text(
-        f"💸 CASHOUT réussi !\n\nMultiplicateur: x{round(game['multiplier'],2)}\nGain: {gain} pts",
-        call.message.chat.id,
-        call.message.message_id
-    )
-
-# ================= ROCKET RISE (rapide) =================
-@bot.message_handler(func=lambda m: m.text == "🚀 ROCKET RISE")
-def rocket_rise(message):
-    user_id = message.from_user.id
-    user = get_user(user_id)
-
-    if user[1] < 100:
-        bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
-        return
-
-    crash = round(random.uniform(1.0, 7.0), 2)
-
-    update_balance(user_id, user[1] - 100)
-
-    gain = int(100 * crash)
-    update_balance(user_id, get_user(user_id)[1] + gain)
+        crash_data["players"][user_id] = {
+            "bet": bet,
+            "auto": None,
+            "cashed": False
+        }
 
     bot.send_message(
         message.chat.id,
-        f"🚀 Rocket Rise\n\n💥 Crash à x{crash}\n\n💰 Gain: {gain} pts",
-        reply_markup=main_menu(user_id)
+        "🔥 Partie rejointe !\nEnvoie: auto 2.0 pour auto cashout\nEnvoie: cashout pour retirer manuellement"
     )
 
-# ================= MINES =================
-@bot.message_handler(func=lambda m: m.text == "🎮 MINES 5x5")
-def start_game(message):
+# ================= START ROUND =================
+def start_crash_round():
+    crash_data["active"] = True
+    crash_data["multiplier"] = 1.0
+    crash_data["crash_point"] = round(random.uniform(1.5, 8.0), 2)
+    crash_data["players"] = {}
+
+    threading.Thread(target=run_crash, daemon=True).start()
+
+# ================= RUN CRASH =================
+def run_crash():
+    while crash_data["active"]:
+        time.sleep(0.8)
+
+        with crash_data["lock"]:
+            crash_data["multiplier"] += round(random.uniform(0.10, 0.30), 2)
+
+            # AUTO CASHOUT
+            for user_id, data in list(crash_data["players"].items()):
+                if data["auto"] and not data["cashed"]:
+                    if crash_data["multiplier"] >= data["auto"]:
+                        gain = int(data["bet"] * crash_data["multiplier"])
+                        user = get_user(user_id)
+                        update_balance(user_id, user[1] + gain)
+                        data["cashed"] = True
+                        bot.send_message(user_id, f"🤖 Auto cashout à x{data['auto']} | Gain: {gain}")
+
+            # CRASH
+            if crash_data["multiplier"] >= crash_data["crash_point"]:
+                crash_value = crash_data["crash_point"]
+
+                cursor.execute("INSERT INTO crash_history (multiplier) VALUES (?)", (crash_value,))
+                conn.commit()
+
+                for user_id, data in crash_data["players"].items():
+                    if not data["cashed"]:
+                        bot.send_message(user_id, f"💥 Crash à x{crash_value} ❌ Perdu")
+
+                crash_data["active"] = False
+                return
+
+# ================= MANUAL CASHOUT =================
+@bot.message_handler(func=lambda m: m.text == "cashout")
+def manual_cashout(message):
     user_id = message.from_user.id
-    user = get_user(user_id)
 
-    if user[1] < 100:
-        bot.send_message(message.chat.id, "❌ Minimum 100 pts.")
-        return
+    with crash_data["lock"]:
+        if user_id not in crash_data["players"]:
+            return
 
-    mines = random.sample(range(25), 5)
+        data = crash_data["players"][user_id]
 
-    games[user_id] = {
-        "mines": mines,
-        "revealed": [],
-        "bet": 100,
-        "multiplier": 1.0
-    }
+        if data["cashed"]:
+            return
 
-    update_balance(user_id, user[1] - 100)
+        gain = int(data["bet"] * crash_data["multiplier"])
+        user = get_user(user_id)
+        update_balance(user_id, user[1] + gain)
 
-    send_grid(message.chat.id, user_id)
+        data["cashed"] = True
 
-def send_grid(chat_id, user_id):
-    game = games[user_id]
-
-    markup = types.InlineKeyboardMarkup(row_width=5)
-    buttons = []
-
-    for i in range(25):
-        if i in game["revealed"]:
-            buttons.append(types.InlineKeyboardButton("💎", callback_data="x"))
-        else:
-            buttons.append(types.InlineKeyboardButton("⬛", callback_data=f"cell_{i}"))
-
-    markup.add(*buttons)
-    markup.add(types.InlineKeyboardButton(
-        f"💸 CASHOUT x{game['multiplier']}",
-        callback_data="cashout"
-    ))
-
-    bot.send_message(chat_id, "🎮 Choisis une case :", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("cell_"))
-def click_cell(call):
-    user_id = call.from_user.id
-    index = int(call.data.split("_")[1])
-
-    if user_id not in games:
-        return
-
-    game = games[user_id]
-
-    if index in game["mines"]:
-        bot.edit_message_text(
-            "💣 BOOM ! Tu as perdu.",
-            call.message.chat.id,
-            call.message.message_id
-        )
-        games.pop(user_id)
-        return
-
-    game["revealed"].append(index)
-    game["multiplier"] += 0.5
-
-    markup = types.InlineKeyboardMarkup(row_width=5)
-    buttons = []
-
-    for i in range(25):
-        if i in game["revealed"]:
-            buttons.append(types.InlineKeyboardButton("💎", callback_data="x"))
-        else:
-            buttons.append(types.InlineKeyboardButton("⬛", callback_data=f"cell_{i}"))
-
-    markup.add(*buttons)
-    markup.add(types.InlineKeyboardButton(
-        f"💸 CASHOUT x{game['multiplier']}",
-        callback_data="cashout"
-    ))
-
-    bot.edit_message_reply_markup(
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=markup
+    bot.send_message(
+        message.chat.id,
+        f"💸 Cashout manuel à x{round(crash_data['multiplier'],2)} | Gain: {gain}"
     )
 
-@bot.callback_query_handler(func=lambda call: call.data == "cashout")
-def cashout(call):
-    user_id = call.from_user.id
+# ================= AUTO CASHOUT =================
+@bot.message_handler(func=lambda m: m.text.startswith("auto "))
+def set_auto(message):
+    user_id = message.from_user.id
 
-    if user_id not in games:
+    try:
+        value = float(message.text.split()[1])
+    except:
+        bot.send_message(message.chat.id, "Format: auto 2.0")
         return
 
-    game = games[user_id]
-    gain = int(game["bet"] * game["multiplier"])
+    with crash_data["lock"]:
+        if user_id in crash_data["players"]:
+            crash_data["players"][user_id]["auto"] = value
+            bot.send_message(message.chat.id, f"🤖 Auto réglé à x{value}")
 
-    user = get_user(user_id)
-    update_balance(user_id, user[1] + gain)
+# ================= HISTORY =================
+@bot.message_handler(func=lambda m: m.text == "📊 HISTORIQUE")
+def history(message):
+    cursor.execute("SELECT multiplier FROM crash_history ORDER BY id DESC LIMIT 10")
+    rows = cursor.fetchall()
 
-    bot.edit_message_text(
-        f"💸 CASHOUT réussi !\n\nGain: {gain} pts",
-        call.message.chat.id,
-        call.message.message_id
-    )
+    if not rows:
+        bot.send_message(message.chat.id, "Aucun historique.")
+        return
 
-    games.pop(user_id)
+    text = "📊 10 derniers crashs:\n\n"
+    for row in rows:
+        text += f"x{row[0]}\n"
+
+    bot.send_message(message.chat.id, text)
 
 # ================= ADMIN =================
 @bot.message_handler(func=lambda m: m.text == "🛡 QG")
@@ -304,7 +230,7 @@ def admin_panel(message):
 
     bot.send_message(
         message.chat.id,
-        f"🛡 QG ADMIN\n\n👥 Utilisateurs: {total_users}\n💰 Total balance: {total_balance}"
+        f"🛡 QG\n\n👥 Users: {total_users}\n💰 Total balance: {total_balance}"
     )
 
 # ================= RUN =================
