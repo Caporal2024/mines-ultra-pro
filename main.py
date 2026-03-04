@@ -4,18 +4,22 @@ import random
 import time
 import os
 
+# 🔑 Token Railway (ne mets pas ton token en dur)
 TOKEN = os.getenv("TOKEN")
+
 bot = telebot.TeleBot(TOKEN)
 
+# ⏱ Intervalle entre signaux (4 minutes)
+INTERVAL = 240
 last_signal_time = 0
-INTERVAL = 240  # 4 minutes
 
-# 🔥 Mets ici tes vrais liens
+# 🔗 Mets tes vrais liens ici
 AVIATOR_LINK = "https://tonsite.com/aviator"
 LUCKYJET_LINK = "https://tonsite.com/luckyjet"
+CHANNEL_LINK = "https://t.me/toncanal"
 
 def generate_signal():
-    return round(random.uniform(1.70, 2.20), 2)
+    return round(random.uniform(1.70, 2.30), 2)
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -25,7 +29,7 @@ def start(message):
     )
 
 @bot.message_handler(commands=['signal'])
-def signal(message):
+def send_signal(message):
     global last_signal_time
 
     now = time.time()
@@ -41,27 +45,41 @@ def signal(message):
     last_signal_time = now
     multiplier = generate_signal()
 
-    # 🚀 NEW ROUND
+    # 🚀 Message NEW ROUND
     bot.send_message(message.chat.id, "🚀 NEW ROUND 🚀")
 
     time.sleep(2)
 
     # 🎮 Création des boutons
-    markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton("🎮 Ouvrir Aviator", url=AVIATOR_LINK)
-    btn2 = types.InlineKeyboardButton("🎮 Ouvrir Lucky Jet", url=LUCKYJET_LINK)
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
-    markup.add(btn1)
-    markup.add(btn2)
+    logo_btn = types.InlineKeyboardButton(
+        "⬜ H CAPORAL PCS SIGNAL",
+        url=CHANNEL_LINK
+    )
 
-    # 🟢 SIGNAL + boutons
+    aviator_btn = types.InlineKeyboardButton(
+        "🎮 Ouvrir Aviator",
+        url=AVIATOR_LINK
+    )
+
+    luckyjet_btn = types.InlineKeyboardButton(
+        "🎮 Ouvrir Lucky Jet",
+        url=LUCKYJET_LINK
+    )
+
+    markup.add(logo_btn)
+    markup.add(aviator_btn)
+    markup.add(luckyjet_btn)
+
+    # 🟢 Signal final
     bot.send_message(
         message.chat.id,
         f"""
 🟢 SIGNAL LIVE
 
 🎯 Cashout conseillé : {multiplier}x
-⚠️ Mise : 5% bankroll
+⚠️ Mise recommandée : 5% bankroll
 
 💼 CAPORAL PCS SIGNAL
 """,
