@@ -14,8 +14,10 @@ def generate_signal():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id,
-    "Bienvenue 👑\nTape /signal pour recevoir un signal.")
+    bot.send_message(
+        message.chat.id,
+        "👑 CAPORAL PCS SIGNAL\n\nTape /signal pour recevoir un signal live 🚀"
+    )
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -25,24 +27,37 @@ def signal(message):
 
     if now - last_signal_time < INTERVAL:
         remaining = int((INTERVAL - (now - last_signal_time)) / 60) + 1
-        bot.send_message(message.chat.id,
-        f"⏳ Prochain signal dans {remaining} minute(s)")
+        bot.send_message(
+            message.chat.id,
+            f"⏳ Prochain signal dans {remaining} minute(s)"
+        )
         return
 
     last_signal_time = now
     multiplier = generate_signal()
 
-    # 🔥 NEW ROUND MESSAGE
+    # 🚀 NEW ROUND
     bot.send_message(message.chat.id, "🚀 NEW ROUND 🚀")
 
-    # Petit délai pour effet pro
     time.sleep(2)
 
-    # SIGNAL MESSAGE
-    bot.send_message(message.chat.id, f"""
+    # 🖼️ IMAGE CAPORAL
+    with open("cover.png", "rb") as photo:
+        bot.send_photo(message.chat.id, photo)
+
+    time.sleep(1)
+
+    # 🟢 SIGNAL
+    bot.send_message(
+        message.chat.id,
+        f"""
 🟢 SIGNAL LIVE
+
 🎯 Cashout conseillé : {multiplier}x
 ⚠️ Mise : 5% bankroll
-""")
+
+💼 CAPORAL PCS SIGNAL
+"""
+    )
 
 bot.infinity_polling()
