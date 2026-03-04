@@ -32,6 +32,13 @@ def signal(message):
     last_signal_time = now
     multiplier = generate_signal()
 
+    # 🔥 NEW ROUND MESSAGE
+    bot.send_message(message.chat.id, "🚀 NEW ROUND 🚀")
+
+    # Petit délai pour effet pro
+    time.sleep(2)
+
+    # SIGNAL MESSAGE
     bot.send_message(message.chat.id, f"""
 🟢 SIGNAL LIVE
 🎯 Cashout conseillé : {multiplier}x
