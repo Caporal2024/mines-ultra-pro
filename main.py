@@ -41,11 +41,13 @@ def signal(message):
 
     time.sleep(2)
 
-    # 🖼️ IMAGE CAPORAL
-    with open("cover.png", "rb") as photo:
-        bot.send_photo(message.chat.id, photo)
-
-    time.sleep(1)
+    # 🖼️ Essaye d'envoyer l'image
+    try:
+        with open("cover.png", "rb") as photo:
+            bot.send_photo(message.chat.id, photo)
+        time.sleep(1)
+    except:
+        print("Image non trouvée, on continue sans image")
 
     # 🟢 SIGNAL
     bot.send_message(
