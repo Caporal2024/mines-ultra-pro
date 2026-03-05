@@ -2,28 +2,22 @@ import telebot
 from telebot import types
 import random
 import time
-import os
 
-TOKEN = os.getenv("TOKEN")
+from config import *
+import database
 
 bot = telebot.TeleBot(TOKEN)
 
 INTERVAL = 240
 last_signal_time = 0
 
-# joueurs connectés
-players = {}
-
-AVIATOR_LINK = "https://tonsite.com/aviator"
-LUCKYJET_LINK = "https://tonsite.com/luckyjet"
-VIP_LINK = "https://t.me/toncanal"
-
 
 def generate_signal():
-    return round(random.uniform(1.70, 2.30), 2)
+    return round(random.uniform(1.7, 2.5), 2)
 
 
 def main_menu():
+
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
 
     btn1 = types.KeyboardButton("🔑 Login")
@@ -32,14 +26,14 @@ def main_menu():
     btn4 = types.KeyboardButton("⏳ Next Signal")
     btn5 = types.KeyboardButton("💎 VIP Access")
 
-    markup.row(btn1, btn2)
-    markup.row(btn3, btn4)
-    markup.row(btn5)
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    markup.add(btn5)
 
     return markup
 
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=["start"])
 def start(message):
 
     bot.send_message(
@@ -50,34 +44,27 @@ def start(message):
 
 
 # LOGIN
-@bot.message_handler(func=lambda message: message.text == "🔑 Login")
+@bot.message_handler(func=lambda m: m.text == "🔑 Login")
 def login(message):
 
-    msg = bot.send_message(
-        message.chat.id,
-        "🔑 Envoie ton Player ID pour te connecter."
-    )
+    msg = bot.send_message(message.chat.id, "Envoie ton Player ID")
 
-    bot.register_next_step_handler(msg, save_player_id)
+    bot.register_next_step_handler(msg, save_player)
 
 
-def save_player_id(message):
+def save_player(message):
 
-    players[message.chat.id] = message.text
+    database.add_user(message.chat.id, message.text)
 
     bot.send_message(
         message.chat.id,
-        f"✅ Player ID enregistré : {message.text}\n\nTu peux maintenant recevoir les signaux."
+        "✅ Player ID enregistré"
     )
 
 
 # OPEN GAME
-@bot.message_handler(func=lambda message: message.text == "🎮 Open Game")
+@bot.message_handler(func=lambda m: m.text == "🎮 Open Game")
 def open_game(message):
-
-    if message.chat.id not in players:
-        bot.send_message(message.chat.id, "⚠️ Connecte-toi d'abord avec 🔑 Login")
-        return
 
     markup = types.InlineKeyboardMarkup()
 
@@ -86,47 +73,24 @@ def open_game(message):
         url=AVIATOR_LINK
     )
 
-    luckyjet = types.InlineKeyboardButton(
+    lucky = types.InlineKeyboardButton(
         "✈️ Lucky Jet",
         url=LUCKYJET_LINK
     )
 
     markup.add(aviator)
-    markup.add(luckyjet)
+    markup.add(lucky)
 
     bot.send_message(
         message.chat.id,
-        "🎮 Choisis ton jeu :",
+        "Choisis ton jeu",
         reply_markup=markup
     )
 
 
-# HISTORIQUE
-@bot.message_handler(func=lambda message: message.text == "📊 Odds History")
-def history(message):
-
-    if message.chat.id not in players:
-        bot.send_message(message.chat.id, "⚠️ Connecte-toi d'abord avec 🔑 Login")
-        return
-
-    results = []
-
-    for i in range(5):
-        results.append(str(generate_signal()) + "x")
-
-    bot.send_message(
-        message.chat.id,
-        "📊 Derniers multiplicateurs :\n\n" + "\n".join(results)
-    )
-
-
 # SIGNAL
-@bot.message_handler(func=lambda message: message.text == "⏳ Next Signal")
-def next_signal(message):
-
-    if message.chat.id not in players:
-        bot.send_message(message.chat.id, "⚠️ Connecte-toi d'abord avec 🔑 Login")
-        return
+@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
+def signal(message):
 
     global last_signal_time
 
@@ -134,11 +98,11 @@ def next_signal(message):
 
     if now - last_signal_time < INTERVAL:
 
-        remaining = int(INTERVAL - (now - last_signal_time))
+        remaining = int((INTERVAL - (now - last_signal_time)) / 60) + 1
 
         bot.send_message(
             message.chat.id,
-            f"⏳ Next signal in {remaining} seconds"
+            f"⏳ prochain signal dans {remaining} minute(s)"
         )
 
         return
@@ -149,15 +113,8 @@ def next_signal(message):
 
     bot.send_message(
         message.chat.id,
-        "🚀 NEW ROUND 🚀"
-    )
-
-    time.sleep(2)
-
-    bot.send_message(
-        message.chat.id,
         f"""
-🟢 SIGNAL LIVE
+🚀 NEW ROUND
 
 🎯 Cashout conseillé : {multiplier}x
 ⚠️ Mise recommandée : 5%
@@ -168,23 +125,56 @@ def next_signal(message):
 
 
 # VIP
-@bot.message_handler(func=lambda message: message.text == "💎 VIP Access")
+@bot.message_handler(func=lambda m: m.text == "💎 VIP Access")
 def vip(message):
-
-    markup = types.InlineKeyboardMarkup()
-
-    vip = types.InlineKeyboardButton(
-        "💎 Rejoindre VIP",
-        url=VIP_LINK
-    )
-
-    markup.add(vip)
 
     bot.send_message(
         message.chat.id,
-        "💎 Accès VIP pour recevoir plus de signaux.",
-        reply_markup=markup
+        "💎 Contacte l'admin pour accès VIP."
     )
 
+
+# ADMIN VIP
+@bot.message_handler(commands=["addvip"])
+def addvip(message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    try:
+
+        user_id = int(message.text.split()[1])
+
+        database.make_vip(user_id)
+
+        bot.reply_to(message, "✅ VIP activé")
+
+    except:
+
+        bot.reply_to(message, "usage: /addvip user_id")
+
+
+# STATS
+@bot.message_handler(commands=["stats"])
+def stats(message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    users = database.total_users()
+    vip = database.total_vip()
+
+    bot.send_message(
+        message.chat.id,
+        f"""
+📊 STATISTIQUES
+
+👥 utilisateurs : {users}
+💎 VIP : {vip}
+"""
+    )
+
+
+print("BOT STARTED")
 
 bot.infinity_polling()
