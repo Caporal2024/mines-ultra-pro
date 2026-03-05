@@ -4,51 +4,27 @@ from telebot import types
 import random
 
 TOKEN = os.getenv("TOKEN")
+
 bot = telebot.TeleBot(TOKEN)
 
+# CODE SECRET POUR UTILISER LE BOT
 ACCESS_CODE = "PCS2026"
-CHANNEL = "@caporal_signal_vip"
 
 authorized_users = {}
 player_ids = {}
-
-# vérifier si utilisateur est dans le canal
-def check_subscription(user_id):
-
-    try:
-        member = bot.get_chat_member(CHANNEL, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except:
-        return False
 
 # START
 @bot.message_handler(commands=['start'])
 def start(message):
 
-    if not check_subscription(message.from_user.id):
-
-        markup = types.InlineKeyboardMarkup()
-        join = types.InlineKeyboardButton(
-            "📢 Rejoindre le canal",
-            url="https://t.me/caporal_signal_vip"
-        )
-        markup.add(join)
-
-        bot.send_message(
-            message.chat.id,
-            "⚠️ Tu dois rejoindre le canal pour utiliser le bot.",
-            reply_markup=markup
-        )
-        return
-
     msg = bot.send_message(
         message.chat.id,
-        "🔐 Entre le code d'accès :"
+        "🔐 Entrez le code d'accès pour utiliser ce bot :"
     )
 
     bot.register_next_step_handler(msg, check_code)
 
-# vérifier code
+# VERIFIER CODE
 def check_code(message):
 
     if message.text == ACCESS_CODE:
@@ -68,11 +44,18 @@ def check_code(message):
 
     else:
 
-        bot.send_message(message.chat.id,"❌ Code incorrect.")
+        bot.send_message(
+            message.chat.id,
+            "❌ Code incorrect. Accès refusé."
+        )
 
-# LOGIN
+# LOGIN PLAYER ID
 @bot.message_handler(func=lambda m: m.text == "🔑 Login")
 def login(message):
+
+    if message.chat.id not in authorized_users:
+        bot.send_message(message.chat.id,"⛔ Accès refusé")
+        return
 
     msg = bot.send_message(
         message.chat.id,
@@ -98,7 +81,7 @@ def signal(message):
 
         bot.send_message(
             message.chat.id,
-            "⚠️ Connecte ton Player ID d'abord."
+            "⚠️ Tu dois d'abord envoyer ton Player ID avec 🔑 Login."
         )
         return
 
@@ -106,10 +89,10 @@ def signal(message):
 
     bot.send_message(
         message.chat.id,
-        f"🚀 SIGNAL\n\nMultiplier : {crash}x\n\nCashout avant {crash}x"
+        f"🚀 SIGNAL\n\nMultiplier prévu : {crash}x\n\nCashout avant {crash}x"
     )
 
-# HISTORY
+# HISTORIQUE
 @bot.message_handler(func=lambda m: m.text == "📊 Odds History")
 def history(message):
 
@@ -120,7 +103,7 @@ def history(message):
 
     bot.send_message(
         message.chat.id,
-        "📊 Historique\n\n"+"\n".join(odds)
+        "📊 Historique :\n\n"+"\n".join(odds)
     )
 
 print("Bot lancé...")
