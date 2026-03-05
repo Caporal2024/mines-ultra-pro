@@ -3,170 +3,147 @@ from telebot import types
 import random
 import time
 import os
-import threading
 
+# 🔑 Token Railway
 TOKEN = os.getenv("TOKEN")
 
 bot = telebot.TeleBot(TOKEN)
 
-CHANNEL_ID = "@toncanal"
+# ⏱ Intervalle entre signaux (4 minutes)
+INTERVAL = 240
+last_signal_time = 0
 
+# 🔗 Tes liens
 AVIATOR_LINK = "https://tonsite.com/aviator"
 LUCKYJET_LINK = "https://tonsite.com/luckyjet"
+CHANNEL_LINK = "https://t.me/toncanal"
 
-INTERVAL = 240
-
+# 📊 Historique
 history = []
-players = {}
 
-next_signal = time.time() + INTERVAL
+def generate_signal():
+    return round(random.uniform(1.70, 2.30), 2)
 
-
-def generate_multiplier():
-    value = round(random.uniform(1.50, 2.50), 2)
-
-    history.append(value)
-
-    if len(history) > 20:
-        history.pop(0)
-
-    return value
-
-
-def menu():
-
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
-    markup.row("🔑 Login", "🎮 Open Game")
-    markup.row("📊 Odds History", "⏳ Next Signal")
-    markup.row("💎 VIP Access")
-
-    return markup
-
-
+# 🚀 Commande START
 @bot.message_handler(commands=['start'])
 def start(message):
 
-    bot.send_message(
-        message.chat.id,
-        "👑 CAPORAL PCS SIGNAL\n\nEnter your Player ID",
-        reply_markup=menu()
+    markup = types.InlineKeyboardMarkup(row_width=1)
+
+    aviator_btn = types.InlineKeyboardButton(
+        "🎮 Ouvrir Aviator",
+        url=AVIATOR_LINK
     )
 
+    luckyjet_btn = types.InlineKeyboardButton(
+        "🎮 Ouvrir Lucky Jet",
+        url=LUCKYJET_LINK
+    )
 
-@bot.message_handler(func=lambda m: m.text == "🔑 Login")
-def login(message):
+    channel_btn = types.InlineKeyboardButton(
+        "📢 Rejoindre le canal",
+        url=CHANNEL_LINK
+    )
 
-    msg = bot.send_message(message.chat.id, "Send Player ID")
-    bot.register_next_step_handler(msg, save_player)
-
-
-def save_player(message):
-
-    players[message.chat.id] = message.text
+    markup.add(aviator_btn)
+    markup.add(luckyjet_btn)
+    markup.add(channel_btn)
 
     bot.send_message(
         message.chat.id,
-        "✅ Player ID saved",
-        reply_markup=menu()
+        """
+👑 *CAPORAL PCS SIGNAL*
+
+Bot de signaux Aviator ⚡
+
+Commandes disponibles :
+
+/signal → Recevoir un signal  
+/stats → Voir les statistiques
+""",
+        parse_mode="Markdown",
+        reply_markup=markup
     )
 
-
-@bot.message_handler(func=lambda m: m.text == "🎮 Open Game")
-def open_game(message):
-
-    markup = types.InlineKeyboardMarkup()
-
-    aviator = types.InlineKeyboardButton("🚀 Aviator", url=AVIATOR_LINK)
-    lucky = types.InlineKeyboardButton("⚡ Lucky Jet", url=LUCKYJET_LINK)
-
-    markup.add(aviator)
-    markup.add(lucky)
-
-    bot.send_message(message.chat.id, "Choose Game", reply_markup=markup)
-
-
-@bot.message_handler(func=lambda m: m.text == "📊 Odds History")
-def odds(message):
+# 📊 Commande STATS
+@bot.message_handler(commands=['stats'])
+def stats(message):
 
     if not history:
-        bot.send_message(message.chat.id, "No data yet")
+        bot.send_message(message.chat.id, "Aucune statistique pour le moment.")
         return
 
-    text = "\n".join([f"{x}x" for x in history])
+    text = "📊 Derniers multiplicateurs :\n\n"
 
-    bot.send_message(message.chat.id, f"📊 History\n\n{text}")
+    for m in history[-10:]:
+        text += f"• {m}x\n"
 
+    bot.send_message(message.chat.id, text)
 
-@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
-def next_signal_time(message):
+# 🚀 Commande SIGNAL
+@bot.message_handler(commands=['signal'])
+def send_signal(message):
 
-    remaining = int(next_signal - time.time())
+    global last_signal_time
 
-    if remaining < 0:
-        remaining = 0
+    now = time.time()
 
-    minutes = remaining // 60
-    seconds = remaining % 60
+    if now - last_signal_time < INTERVAL:
 
-    bot.send_message(
-        message.chat.id,
-        f"⏳ Next signal in {minutes}m {seconds}s"
-    )
-
-
-@bot.message_handler(func=lambda m: m.text == "💎 VIP Access")
-def vip(message):
-
-    bot.send_message(
-        message.chat.id,
-        "💎 VIP ACCESS\n\nContact admin to join premium signals"
-    )
-
-
-def auto_signal():
-
-    global next_signal
-
-    while True:
-
-        multiplier = generate_multiplier()
-
-        markup = types.InlineKeyboardMarkup()
-
-        aviator = types.InlineKeyboardButton(
-            "🚀 Play Aviator",
-            url=AVIATOR_LINK
-        )
-
-        lucky = types.InlineKeyboardButton(
-            "⚡ Play Lucky Jet",
-            url=LUCKYJET_LINK
-        )
-
-        markup.add(aviator)
-        markup.add(lucky)
+        remaining = int((INTERVAL - (now - last_signal_time)) / 60) + 1
 
         bot.send_message(
-            CHANNEL_ID,
-            f"""
-🚀 NEW ROUND
-
-🟢 SIGNAL
-
-🎯 Cashout : {multiplier}x
-⚠️ Bet 5%
-
-👑 CAPORAL PCS SIGNAL
-""",
-            reply_markup=markup
+            message.chat.id,
+            f"⏳ Prochain signal dans {remaining} minute(s)"
         )
+        return
 
-        next_signal = time.time() + INTERVAL
+    last_signal_time = now
+    multiplier = generate_signal()
 
-        time.sleep(INTERVAL)
+    history.append(multiplier)
 
+    # 🚀 NEW ROUND
+    bot.send_message(message.chat.id, "🚀 *NEW ROUND* 🚀", parse_mode="Markdown")
 
-threading.Thread(target=auto_signal).start()
+    time.sleep(2)
 
+    markup = types.InlineKeyboardMarkup(row_width=1)
+
+    logo_btn = types.InlineKeyboardButton(
+        "👑 CAPORAL PCS SIGNAL",
+        url=CHANNEL_LINK
+    )
+
+    aviator_btn = types.InlineKeyboardButton(
+        "🎮 Ouvrir Aviator",
+        url=AVIATOR_LINK
+    )
+
+    luckyjet_btn = types.InlineKeyboardButton(
+        "🎮 Ouvrir Lucky Jet",
+        url=LUCKYJET_LINK
+    )
+
+    markup.add(logo_btn)
+    markup.add(aviator_btn)
+    markup.add(luckyjet_btn)
+
+    bot.send_message(
+        message.chat.id,
+        f"""
+🟢 *SIGNAL LIVE*
+
+🎯 Cashout conseillé : *{multiplier}x*  
+⚠️ Mise recommandée : *5% bankroll*
+
+📊 Utilise /stats pour voir l'historique
+
+💼 CAPORAL PCS SIGNAL
+""",
+        parse_mode="Markdown",
+        reply_markup=markup
+    )
+
+# 🔄 Lancer le bot
 bot.infinity_polling()
