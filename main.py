@@ -1,110 +1,133 @@
-import os
 import telebot
 from telebot import types
 import random
+import sqlite3
+import time
+import threading
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "COLLE_TON_TOKEN_ICI"
 
 bot = telebot.TeleBot(TOKEN)
 
-# CODE SECRET POUR UTILISER LE BOT
+# Base de données
+conn = sqlite3.connect("users.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER,
+    player_id TEXT,
+    active INTEGER
+)
+""")
+conn.commit()
+
+# Code secret pour utiliser le bot
 ACCESS_CODE = "PCS2026"
 
-authorized_users = {}
-player_ids = {}
+
+# MENU
+def menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn1 = types.KeyboardButton("🚀 Aviator Signal")
+    btn2 = types.KeyboardButton("✈️ Lucky Jet Signal")
+    markup.add(btn1, btn2)
+    return markup
+
 
 # START
 @bot.message_handler(commands=['start'])
 def start(message):
-
-    msg = bot.send_message(
+    bot.send_message(
         message.chat.id,
-        "🔐 Entrez le code d'accès pour utiliser ce bot :"
+        "🔑 Bienvenue dans le BOT SIGNAL\n\nEnvoie le code d'accès pour continuer."
     )
 
-    bot.register_next_step_handler(msg, check_code)
 
-# VERIFIER CODE
-def check_code(message):
+# CODE ACCES
+@bot.message_handler(func=lambda message: True)
+def check_access(message):
+
+    user_id = message.chat.id
 
     if message.text == ACCESS_CODE:
 
-        authorized_users[message.chat.id] = True
-
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.row("🔑 Login", "🎮 Open Game")
-        markup.row("⏳ Next Signal", "📊 Odds History")
-        markup.row("💎 VIP Access")
-
-        bot.send_message(
-            message.chat.id,
-            "👑 CAPORAL PCS SIGNAL\n\nBienvenue 🚀",
-            reply_markup=markup
+        cursor.execute(
+            "INSERT INTO users (id, player_id, active) VALUES (?, ?, ?)",
+            (user_id, "", 0)
         )
-
-    else:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Code incorrect. Accès refusé."
-        )
-
-# LOGIN PLAYER ID
-@bot.message_handler(func=lambda m: m.text == "🔑 Login")
-def login(message):
-
-    if message.chat.id not in authorized_users:
-        bot.send_message(message.chat.id,"⛔ Accès refusé")
-        return
-
-    msg = bot.send_message(
-        message.chat.id,
-        "🔑 Envoie ton Player ID pour te connecter."
-    )
-
-    bot.register_next_step_handler(msg, save_id)
-
-def save_id(message):
-
-    player_ids[message.chat.id] = message.text
-
-    bot.send_message(
-        message.chat.id,
-        f"✅ Connexion réussie\n\nPlayer ID : {message.text}"
-    )
-
-# SIGNAL
-@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
-def signal(message):
-
-    if message.chat.id not in player_ids:
+        conn.commit()
 
         bot.send_message(
-            message.chat.id,
-            "⚠️ Tu dois d'abord envoyer ton Player ID avec 🔑 Login."
+            user_id,
+            "🔑 Envoie ton Player ID pour te connecter."
         )
         return
 
-    crash = round(random.uniform(1.20,5.00),2)
+    # PLAYER ID
+    cursor.execute("SELECT * FROM users WHERE id=?", (user_id,))
+    user = cursor.fetchone()
 
-    bot.send_message(
-        message.chat.id,
-        f"🚀 SIGNAL\n\nMultiplier prévu : {crash}x\n\nCashout avant {crash}x"
-    )
+    if user:
 
-# HISTORIQUE
-@bot.message_handler(func=lambda m: m.text == "📊 Odds History")
-def history(message):
+        if user[1] == "":
+            cursor.execute(
+                "UPDATE users SET player_id=?, active=1 WHERE id=?",
+                (message.text, user_id)
+            )
+            conn.commit()
 
-    odds = []
+            bot.send_message(
+                user_id,
+                "✅ Connexion réussie !",
+                reply_markup=menu()
+            )
+            return
 
-    for i in range(5):
-        odds.append(str(round(random.uniform(1.10,5.00),2))+"x")
+        if message.text == "🚀 Aviator Signal":
+            send_aviator_signal(user_id)
 
-    bot.send_message(
-        message.chat.id,
-        "📊 Historique :\n\n"+"\n".join(odds)
-    )
+        if message.text == "✈️ Lucky Jet Signal":
+            send_lucky_signal(user_id)
 
-print("Bot lancé...")
+
+# SIGNAL AVIATOR
+def send_aviator_signal(chat_id):
+
+    entree = round(random.uniform(1.10, 1.30), 2)
+    cashout = round(random.uniform(2.00, 3.00), 2)
+
+    signal = f"""
+🚀 SIGNAL AVIATOR
+
+🎯 Entrée : {entree}x
+💰 Cashout : {cashout}x
+
+⏱ Attendre 2 tours
+🔥 Mise : 1000F
+"""
+
+    bot.send_message(chat_id, signal)
+
+
+# SIGNAL LUCKY JET
+def send_lucky_signal(chat_id):
+
+    entree = round(random.uniform(1.10, 1.30), 2)
+    cashout = round(random.uniform(2.00, 3.00), 2)
+
+    signal = f"""
+✈️ SIGNAL LUCKY JET
+
+🎯 Entrée : {entree}x
+💰 Cashout : {cashout}x
+
+⏱ Attendre 2 tours
+🔥 Mise : 1000F
+"""
+
+    bot.send_message(chat_id, signal)
+
+
+print("Bot en marche...")
 bot.infinity_polling()
