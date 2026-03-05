@@ -11,15 +11,18 @@ bot = telebot.TeleBot(TOKEN)
 INTERVAL = 240
 last_signal_time = 0
 
+# joueurs connectés
+players = {}
+
 AVIATOR_LINK = "https://tonsite.com/aviator"
 LUCKYJET_LINK = "https://tonsite.com/luckyjet"
 VIP_LINK = "https://t.me/toncanal"
+
 
 def generate_signal():
     return round(random.uniform(1.70, 2.30), 2)
 
 
-# MENU PRINCIPAL
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
 
@@ -50,15 +53,31 @@ def start(message):
 @bot.message_handler(func=lambda message: message.text == "🔑 Login")
 def login(message):
 
-    bot.send_message(
+    msg = bot.send_message(
         message.chat.id,
         "🔑 Envoie ton Player ID pour te connecter."
+    )
+
+    bot.register_next_step_handler(msg, save_player_id)
+
+
+def save_player_id(message):
+
+    players[message.chat.id] = message.text
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ Player ID enregistré : {message.text}\n\nTu peux maintenant recevoir les signaux."
     )
 
 
 # OPEN GAME
 @bot.message_handler(func=lambda message: message.text == "🎮 Open Game")
 def open_game(message):
+
+    if message.chat.id not in players:
+        bot.send_message(message.chat.id, "⚠️ Connecte-toi d'abord avec 🔑 Login")
+        return
 
     markup = types.InlineKeyboardMarkup()
 
@@ -82,9 +101,13 @@ def open_game(message):
     )
 
 
-# ODDS HISTORY
+# HISTORIQUE
 @bot.message_handler(func=lambda message: message.text == "📊 Odds History")
 def history(message):
+
+    if message.chat.id not in players:
+        bot.send_message(message.chat.id, "⚠️ Connecte-toi d'abord avec 🔑 Login")
+        return
 
     results = []
 
@@ -97,9 +120,13 @@ def history(message):
     )
 
 
-# NEXT SIGNAL
+# SIGNAL
 @bot.message_handler(func=lambda message: message.text == "⏳ Next Signal")
 def next_signal(message):
+
+    if message.chat.id not in players:
+        bot.send_message(message.chat.id, "⚠️ Connecte-toi d'abord avec 🔑 Login")
+        return
 
     global last_signal_time
 
