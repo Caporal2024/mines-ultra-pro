@@ -5,16 +5,22 @@ import time
 import os
 
 TOKEN = os.getenv("TOKEN")
+
 bot = telebot.TeleBot(TOKEN)
 
-last_signal = 0
-cooldown = 120
+INTERVAL = 240
+last_signal_time = 0
 
-history = []
+AVIATOR_LINK = "https://tonsite.com/aviator"
+LUCKYJET_LINK = "https://tonsite.com/luckyjet"
+VIP_LINK = "https://t.me/toncanal"
 
-# -------- MENU PRINCIPAL --------
+def generate_signal():
+    return round(random.uniform(1.70, 2.30), 2)
 
-def menu():
+
+# MENU PRINCIPAL
+def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
 
     btn1 = types.KeyboardButton("🔑 Login")
@@ -30,107 +36,128 @@ def menu():
     return markup
 
 
-# -------- START --------
-
 @bot.message_handler(commands=['start'])
 def start(message):
 
     bot.send_message(
         message.chat.id,
-        "👑 *CAPORAL PCS SIGNAL*\n\nBot de signaux Aviator 🚀",
-        parse_mode="Markdown",
-        reply_markup=menu()
+        "👑 CAPORAL PCS SIGNAL\n\nEnter your Player ID",
+        reply_markup=main_menu()
     )
 
 
-# -------- LOGIN --------
-
-@bot.message_handler(func=lambda m: m.text == "🔑 Login")
+# LOGIN
+@bot.message_handler(func=lambda message: message.text == "🔑 Login")
 def login(message):
 
     bot.send_message(
         message.chat.id,
-        "🔐 Connecte-toi ici :\nhttps://tonsite.com/login"
+        "🔑 Envoie ton Player ID pour te connecter."
     )
 
 
-# -------- OPEN GAME --------
-
-@bot.message_handler(func=lambda m: m.text == "🎮 Open Game")
+# OPEN GAME
+@bot.message_handler(func=lambda message: message.text == "🎮 Open Game")
 def open_game(message):
+
+    markup = types.InlineKeyboardMarkup()
+
+    aviator = types.InlineKeyboardButton(
+        "🚀 Aviator",
+        url=AVIATOR_LINK
+    )
+
+    luckyjet = types.InlineKeyboardButton(
+        "✈️ Lucky Jet",
+        url=LUCKYJET_LINK
+    )
+
+    markup.add(aviator)
+    markup.add(luckyjet)
 
     bot.send_message(
         message.chat.id,
-        "🎮 Ouvre Aviator ici :\nhttps://tonsite.com/aviator"
+        "🎮 Choisis ton jeu :",
+        reply_markup=markup
     )
 
 
-# -------- HISTORY --------
+# ODDS HISTORY
+@bot.message_handler(func=lambda message: message.text == "📊 Odds History")
+def history(message):
 
-@bot.message_handler(func=lambda m: m.text == "📊 Odds History")
-def history_odds(message):
+    results = []
 
-    if not history:
-        bot.send_message(message.chat.id, "Aucun historique.")
-        return
+    for i in range(5):
+        results.append(str(generate_signal()) + "x")
 
-    text = "📊 Historique Aviator :\n\n"
-
-    for h in history[-10:]:
-        text += f"{h}x\n"
-
-    bot.send_message(message.chat.id, text)
+    bot.send_message(
+        message.chat.id,
+        "📊 Derniers multiplicateurs :\n\n" + "\n".join(results)
+    )
 
 
-# -------- SIGNAL --------
+# NEXT SIGNAL
+@bot.message_handler(func=lambda message: message.text == "⏳ Next Signal")
+def next_signal(message):
 
-@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
-def signal(message):
-
-    global last_signal
+    global last_signal_time
 
     now = time.time()
 
-    if now - last_signal < cooldown:
+    if now - last_signal_time < INTERVAL:
 
-        wait = int(cooldown - (now - last_signal))
+        remaining = int(INTERVAL - (now - last_signal_time))
 
         bot.send_message(
             message.chat.id,
-            f"⏳ Prochain signal dans {wait} secondes"
+            f"⏳ Next signal in {remaining} seconds"
         )
+
         return
 
-    last_signal = now
+    last_signal_time = now
 
-    multiplier = round(random.uniform(1.5, 2.5), 2)
+    multiplier = generate_signal()
 
-    history.append(multiplier)
+    bot.send_message(
+        message.chat.id,
+        "🚀 NEW ROUND 🚀"
+    )
+
+    time.sleep(2)
 
     bot.send_message(
         message.chat.id,
         f"""
-🚀 *SIGNAL AVIATOR*
+🟢 SIGNAL LIVE
 
-🎯 Cashout : *{multiplier}x*
+🎯 Cashout conseillé : {multiplier}x
+⚠️ Mise recommandée : 5%
 
-⚠️ Mise : 5% bankroll
-""",
-        parse_mode="Markdown"
+👑 CAPORAL PCS SIGNAL
+"""
     )
 
 
-# -------- VIP --------
-
-@bot.message_handler(func=lambda m: m.text == "💎 VIP Access")
+# VIP
+@bot.message_handler(func=lambda message: message.text == "💎 VIP Access")
 def vip(message):
+
+    markup = types.InlineKeyboardMarkup()
+
+    vip = types.InlineKeyboardButton(
+        "💎 Rejoindre VIP",
+        url=VIP_LINK
+    )
+
+    markup.add(vip)
 
     bot.send_message(
         message.chat.id,
-        "💎 VIP disponible ici :\nhttps://t.me/toncanalvip"
+        "💎 Accès VIP pour recevoir plus de signaux.",
+        reply_markup=markup
     )
 
-
-# -------- RUN BOT --------
 
 bot.infinity_polling()
