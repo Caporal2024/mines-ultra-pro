@@ -2,15 +2,17 @@ import telebot
 from telebot import types
 import sqlite3
 
-TOKEN = "PUT_YOUR_TOKEN_HERE"
+# ---------------- CONFIG ----------------
+
+TOKEN = ""  # mets ton token ici
+ADMIN_ID = 0  # mets ton ID Telegram ici
 
 bot = telebot.TeleBot(TOKEN)
-
-ADMIN_ID = 123456789
 
 # ---------------- DATABASE ----------------
 
 def init_db():
+
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
 
@@ -27,33 +29,40 @@ def init_db():
 
 init_db()
 
+# ---------------- MENU ----------------
+
+def main_menu():
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+    login = types.KeyboardButton("🔑 Login")
+    game = types.KeyboardButton("🎮 Open Game")
+    signal = types.KeyboardButton("⏳ Next Signal")
+
+    markup.add(login)
+    markup.add(game)
+    markup.add(signal)
+
+    return markup
+
 # ---------------- START ----------------
 
 @bot.message_handler(commands=['start'])
 def start(message):
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
-    login = types.KeyboardButton("🔑 Login")
-    open_game = types.KeyboardButton("🎮 Open Game")
-    signal = types.KeyboardButton("⏳ Next Signal")
-
-    markup.add(login)
-    markup.add(open_game)
-    markup.add(signal)
-
     bot.send_message(
         message.chat.id,
-        "🤖 Welcome to Aviator Bot\n\nChoose option:",
-        reply_markup=markup
+        "🤖 Welcome\n\nChoose option:",
+        reply_markup=main_menu()
     )
 
 # ---------------- LOGIN ----------------
 
-@bot.message_handler(func=lambda message: message.text == "🔑 Login")
+@bot.message_handler(func=lambda m: m.text == "🔑 Login")
 def login(message):
 
     msg = bot.send_message(message.chat.id, "Send Player ID")
+
     bot.register_next_step_handler(msg, save_player)
 
 def save_player(message):
@@ -82,40 +91,44 @@ def check_access(user_id):
     cursor = conn.cursor()
 
     cursor.execute("SELECT active FROM users WHERE user_id=?", (user_id,))
+
     result = cursor.fetchone()
 
     conn.close()
 
     if result and result[0] == 1:
         return True
+
     return False
 
 # ---------------- SIGNAL ----------------
 
-@bot.message_handler(func=lambda message: message.text == "⏳ Next Signal")
+@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
 def signal(message):
 
     if not check_access(message.from_user.id):
+
         bot.send_message(message.chat.id, "❌ Ton accès n'est pas activé.")
         return
 
     bot.send_message(
         message.chat.id,
-        "🚀 SIGNAL AVIATOR\n\nNext round\nCashout: 2.10x"
+        "🚀 AVIATOR SIGNAL\n\nBet: 100\nCashout: 2.00x"
     )
 
 # ---------------- OPEN GAME ----------------
 
-@bot.message_handler(func=lambda message: message.text == "🎮 Open Game")
+@bot.message_handler(func=lambda m: m.text == "🎮 Open Game")
 def open_game(message):
 
     if not check_access(message.from_user.id):
+
         bot.send_message(message.chat.id, "❌ Ton accès n'est pas activé.")
         return
 
     bot.send_message(
         message.chat.id,
-        "🎮 Game Link\nhttps://1win.com/"
+        "🎮 Open Game\n\nhttps://1win.com"
     )
 
 # ---------------- ADMIN ACTIVATE ----------------
@@ -133,7 +146,10 @@ def activate(message):
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
 
-        cursor.execute("UPDATE users SET active=1 WHERE user_id=?", (user_id,))
+        cursor.execute(
+            "UPDATE users SET active=1 WHERE user_id=?",
+            (user_id,)
+        )
 
         conn.commit()
         conn.close()
@@ -141,6 +157,7 @@ def activate(message):
         bot.send_message(message.chat.id, "✅ User activated")
 
     except:
+
         bot.send_message(message.chat.id, "Usage:\n/activate USER_ID")
 
 # ---------------- USERS LIST ----------------
@@ -154,19 +171,24 @@ def users(message):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT user_id,player_id FROM users")
+    cursor.execute("SELECT user_id,player_id,active FROM users")
 
     data = cursor.fetchall()
 
     conn.close()
 
-    text = "👥 Users:\n\n"
+    text = "👥 USERS LIST\n\n"
 
     for u in data:
-        text += f"ID: {u[0]} | Player: {u[1]}\n"
+
+        status = "ACTIVE" if u[2] == 1 else "WAIT"
+
+        text += f"ID: {u[0]} | Player: {u[1]} | {status}\n"
 
     bot.send_message(message.chat.id, text)
 
 # ---------------- RUN ----------------
+
+print("Bot started...")
 
 bot.infinity_polling()
