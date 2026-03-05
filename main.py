@@ -1,13 +1,67 @@
 import os
 import telebot
+from telebot import types
+import random
 
 TOKEN = os.getenv("TOKEN")
 
 bot = telebot.TeleBot(TOKEN)
 
+user_data = {}
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "🤖 Bot démarré avec succès !")
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row("🔑 Login", "🎮 Open Game")
+    markup.row("⏳ Next Signal", "📊 Odds History")
+    markup.row("💎 VIP Access")
 
-print("Bot en cours de démarrage...")
+    bot.send_message(message.chat.id,"👑 CAPORAL PCS SIGNAL\n\nBienvenue 🚀",reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.text == "🎮 Open Game")
+def open_game(message):
+
+    markup = types.InlineKeyboardMarkup()
+    aviator = types.InlineKeyboardButton("✈️ Aviator", url="https://1win.com")
+    lucky = types.InlineKeyboardButton("🚀 Lucky Jet", url="https://1win.com")
+
+    markup.add(aviator)
+    markup.add(lucky)
+
+    bot.send_message(message.chat.id,"🎮 Choisis ton jeu :",reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.text == "🔑 Login")
+def login(message):
+    msg = bot.send_message(message.chat.id,"🔑 Envoie ton Player ID pour te connecter.")
+    bot.register_next_step_handler(msg,save_id)
+
+def save_id(message):
+    user_data[message.chat.id] = message.text
+    bot.send_message(message.chat.id,f"✅ Connexion réussie\n\nPlayer ID : {message.text}")
+
+@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
+def signal(message):
+
+    crash = round(random.uniform(1.20,5.00),2)
+
+    bot.send_message(message.chat.id,
+    f"🚀 SIGNAL LUCKY JET\n\nMultiplier prévu : {crash}x\n\n⚠️ Cashout avant {crash}x")
+
+@bot.message_handler(func=lambda m: m.text == "📊 Odds History")
+def history(message):
+
+    odds = []
+
+    for i in range(5):
+        odds.append(str(round(random.uniform(1.10,5.00),2))+"x")
+
+    bot.send_message(message.chat.id,"📊 Historique :\n\n"+"\n".join(odds))
+
+@bot.message_handler(func=lambda m: m.text == "💎 VIP Access")
+def vip(message):
+
+    bot.send_message(message.chat.id,
+    "💎 Accès VIP\n\nPour accéder aux signaux VIP contacte l'administrateur.")
+
+print("Bot lancé...")
 bot.infinity_polling()
