@@ -5,10 +5,15 @@ import random
 
 TOKEN = os.getenv("TOKEN")
 
+if not TOKEN:
+    print("TOKEN manquant")
+    exit()
+
 bot = telebot.TeleBot(TOKEN)
 
 ACCESS_CODE = "CAPORAL123"
 users = {}
+player_ids = {}
 
 def menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -25,18 +30,29 @@ def menu():
 def start(message):
     bot.send_message(
         message.chat.id,
-        "🚀 Bienvenue dans le BOT SIGNAL AVIATOR\n\n🔐 Clique sur Login pour accéder.",
+        "🚀 Bienvenue dans le BOT SIGNAL AVIATOR\n\n⚠️ Tu dois d'abord envoyer ton Player ID avec 🔑 Login.",
         reply_markup=menu()
     )
 
 
 @bot.message_handler(func=lambda message: message.text == "🔑 Login")
 def login(message):
-    bot.send_message(message.chat.id, "🔑 Envoie le code d'accès.")
+    bot.send_message(message.chat.id, "🔑 Envoie ton Player ID pour te connecter.")
+
+
+@bot.message_handler(func=lambda message: message.text and message.text.startswith("ID"))
+def save_player_id(message):
+    player_ids[message.chat.id] = message.text
+    bot.send_message(message.chat.id, "✅ Player ID enregistré.\n\n🔐 Maintenant envoie le code d'accès.")
 
 
 @bot.message_handler(func=lambda message: message.text == ACCESS_CODE)
 def access_granted(message):
+
+    if message.chat.id not in player_ids:
+        bot.send_message(message.chat.id, "⚠️ Tu dois d'abord envoyer ton Player ID avec 🔑 Login.")
+        return
+
     users[message.chat.id] = True
     bot.send_message(message.chat.id, "✅ Accès autorisé. Les signaux sont débloqués.")
 
@@ -45,7 +61,7 @@ def access_granted(message):
 def signal(message):
 
     if users.get(message.chat.id) != True:
-        bot.send_message(message.chat.id, "❌ Accès refusé. Clique sur Login.")
+        bot.send_message(message.chat.id, "❌ Accès refusé.\n⚠️ Tu dois d'abord envoyer ton Player ID avec 🔑 Login.")
         return
 
     entree = round(random.uniform(1.20, 1.60), 2)
