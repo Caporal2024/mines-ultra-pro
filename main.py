@@ -1,17 +1,16 @@
 import telebot
 
-# METS TON TOKEN TELEGRAM ICI
-TOKEN = "TON_TOKEN_ICI"
+# Ajoute ton TOKEN Telegram ici
+TOKEN = ""
 
 bot = telebot.TeleBot(TOKEN)
 
-# Nouveau code secret (il ne sera pas affiché)
+# Code secret (il ne sera jamais affiché dans le bot)
 SECRET_CODE = "PCS9087"
 
 # Liste des utilisateurs autorisés
 users_autorises = []
 
-# Commande start
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.send_message(
@@ -20,34 +19,33 @@ def start(message):
         "Veuillez entrer votre code d'accès pour continuer."
     )
 
-# Vérification du code
 @bot.message_handler(func=lambda message: True)
 def verifier(message):
 
+    # Si l'utilisateur est déjà autorisé
     if message.chat.id in users_autorises:
         bot.send_message(
             message.chat.id,
-            "✈️ Bot Aviator actif\n\n"
-            "📊 Prédiction Aviator : 2.35x"
+            "✈️ Bot Aviator activé.\n\n"
+            "📊 Prédiction Aviator : 2.10x"
         )
         return
 
+    # Vérifie le code
     if message.text == SECRET_CODE:
 
         users_autorises.append(message.chat.id)
 
         bot.send_message(
             message.chat.id,
-            "✅ Accès autorisé\n\n"
-            "🚀 Bot Aviator activé.\n"
-            "Les prédictions vont commencer."
+            "✅ Accès autorisé.\n"
+            "Bienvenue dans le bot Aviator."
         )
 
     else:
         bot.send_message(
             message.chat.id,
-            "❌ Code incorrect.\n"
-            "Réessayez."
+            "❌ Code incorrect. Réessayez."
         )
 
 bot.infinity_polling()
