@@ -1,85 +1,100 @@
-import os
 import telebot
+from telebot import types
 import random
 import time
-import threading
 
-TOKEN = os.getenv("TOKEN")  # Ajoute ton token dans Railway
+TOKEN = "METS_TON_TOKEN_ICI"
 
 bot = telebot.TeleBot(TOKEN)
 
-# Code secret pour accéder aux signaux
-ACCESS_CODE = "PCS2026"
+# code secret
+ACCESS_CODE = "2580"
 
-users = {}
+# utilisateurs autorisés
+users_ok = []
 
-# Message start
+# menu principal
+def menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn1 = types.KeyboardButton("🔑 Login")
+    btn2 = types.KeyboardButton("🎮 Open Game")
+    btn3 = types.KeyboardButton("⏳ Next Signal")
+    btn4 = types.KeyboardButton("📊 Odds History")
+
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+
+    return markup
+
+
 @bot.message_handler(commands=['start'])
 def start(message):
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn = types.KeyboardButton("🔑 Login")
+    markup.add(btn)
+
     bot.send_message(
         message.chat.id,
-        "🔐 Bienvenue dans le bot Aviator\n\n"
-        "Pour accéder aux signaux envoie ton Player ID.\n"
-        "Exemple : 12345678"
+        "🔐 Bienvenue\n\nClique sur Login pour accéder aux signaux Aviator.",
+        reply_markup=markup
     )
 
-# Réception Player ID
-@bot.message_handler(func=lambda message: True)
+
+# LOGIN
+@bot.message_handler(func=lambda m: m.text == "🔑 Login")
 def login(message):
+    msg = bot.send_message(
+        message.chat.id,
+        "🔑 Envoie ton code d'accès :"
+    )
 
-    user_id = message.chat.id
+    bot.register_next_step_handler(msg, check_code)
 
-    if user_id not in users:
 
-        users[user_id] = {"player_id": message.text}
+def check_code(message):
+
+    if message.text == ACCESS_CODE:
+
+        users_ok.append(message.chat.id)
 
         bot.send_message(
-            user_id,
-            "🔑 Entre maintenant ton code d'accès."
+            message.chat.id,
+            "✅ Accès autorisé !",
+            reply_markup=menu()
         )
 
-    elif users[user_id].get("access") != True:
+    else:
 
-        if message.text == ACCESS_CODE:
+        bot.send_message(
+            message.chat.id,
+            "❌ Code incorrect."
+        )
 
-            users[user_id]["access"] = True
 
-            bot.send_message(
-                user_id,
-                "✅ Accès autorisé\n\n"
-                "📊 Les signaux Aviator arrivent..."
-            )
+# SIGNAL AVIATOR
+@bot.message_handler(func=lambda m: m.text == "⏳ Next Signal")
+def signal(message):
 
-            threading.Thread(target=signals, args=(user_id,)).start()
+    if message.chat.id not in users_ok:
+        bot.send_message(message.chat.id, "🔒 Tu dois d'abord te connecter.")
+        return
 
-        else:
+    entree = round(random.uniform(1.20, 1.60), 2)
+    cashout = round(random.uniform(2.00, 3.50), 2)
+    attente = random.randint(5, 15)
 
-            bot.send_message(
-                user_id,
-                "❌ Code incorrect"
-            )
-
-# Génération de signaux
-def signals(user_id):
-
-    while True:
-
-        entry = round(random.uniform(1.20, 1.60), 2)
-        cashout = round(random.uniform(2.00, 3.50), 2)
-        wait = random.randint(5, 15)
-
-        message = f"""
+    text = f"""
 🚀 SIGNAL AVIATOR
 
-🎯 Entrée : {entry}x
+🎯 Entrée : {entree}x
 💰 Cashout : {cashout}x
 
-⏱ Attendre : {wait}s
+⏱ Attendre : {attente}s
 ⚡ Parier maintenant
 """
 
-        bot.send_message(user_id, message)
+    bot.send_message(message.chat.id, text)
 
-        time.sleep(30)
 
 bot.infinity_polling()
