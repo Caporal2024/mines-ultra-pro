@@ -1,74 +1,86 @@
-import os
 import telebot
 import random
+import time
+import threading
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "METS_TON_TOKEN_ICI"
 
 bot = telebot.TeleBot(TOKEN)
 
-# code secret pour accéder au bot
-CODE_SECRET = "CAPORAL123"
+# Code secret (non affiché dans le bot)
+SECRET_CODE = "CAPORALPCS"
 
-# stockage simple des utilisateurs connectés
-users = {}
+users_unlocked = set()
+
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id,
-    "🔐 Bienvenue sur le Bot Aviator\n\n"
-    "Tape d'abord :\n"
-    "code CAPORAL123")
 
-@bot.message_handler(func=lambda m: True)
-def messages(message):
+    bot.send_message(
+        message.chat.id,
+        "🔐 Bienvenue sur le Bot Aviator\n\n"
+        "Entre ton code d'accès pour activer les signaux."
+    )
 
-    user = message.chat.id
-    text = message.text.lower()
 
-    # vérification du code
-    if text.startswith("code"):
-        code = message.text.split(" ")[1]
+@bot.message_handler(func=lambda message: True)
+def check_access(message):
 
-        if code == CODE_SECRET:
-            bot.send_message(user,
-            "🔑 Accès autorisé\n\n"
-            "Envoie ton Player ID pour te connecter.")
-            users[user] = "login"
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    # Si l'utilisateur n'a pas encore accès
+    if user_id not in users_unlocked:
+
+        if text == SECRET_CODE:
+
+            users_unlocked.add(user_id)
+
+            bot.send_message(
+                message.chat.id,
+                "✅ Accès activé\n\n"
+                "Les signaux Aviator arrivent..."
+            )
+
+            threading.Thread(target=signals, args=(message.chat.id,)).start()
+
         else:
-            bot.send_message(user,"❌ Code incorrect")
 
-    # connexion player id
-    elif user in users and users[user] == "login":
+            bot.send_message(
+                message.chat.id,
+                "❌ Code incorrect.\nRéessaie."
+            )
 
-        player_id = message.text
-        users[user] = player_id
+    else:
 
-        bot.send_message(user,
-        f"✅ Connecté\n\n"
-        f"Player ID : {player_id}\n\n"
-        f"⚡ Tape SIGNAL pour recevoir une prédiction.")
+        bot.send_message(
+            message.chat.id,
+            "⚡ Les signaux sont déjà actifs."
+        )
 
-    # envoyer signal aviator
-    elif text == "signal" and user in users:
 
-        entree = round(random.uniform(1.20,1.80),2)
-        cashout = round(random.uniform(2.00,3.50),2)
+def signals(chat_id):
 
-        bot.send_message(user,
-        f"""
-🎯 SIGNAL AVIATOR
+    while True:
 
+        entree = round(random.uniform(1.20, 1.60), 2)
+        cashout = round(random.uniform(2.00, 5.00), 2)
+        attente = random.randint(5, 20)
+
+        msg = f"""
 🎯 Entrée : {entree}x
 💰 Cashout : {cashout}x
 
-⏱ Attendre 2 tours
-🔥 Mise conseillée : 200f
+⏱ Attendre {attente} secondes
 
 ⚡ Parier maintenant
-""")
+"""
 
-    else:
-        bot.send_message(user,"❗ Tu dois d'abord entrer le code.")
+        bot.send_message(chat_id, msg)
 
-print("Bot lancé...")
+        time.sleep(60)
+
+
+print("Bot démarré...")
+
 bot.infinity_polling()
