@@ -2,22 +2,20 @@ import telebot
 from telebot import types
 import random
 import time
-import os
 
 TOKEN = "PUT_YOUR_TOKEN_HERE"
 
 bot = telebot.TeleBot(TOKEN)
 
-ACCESS_CODE = "CaporalPCS"
-
+ACCESS_CODE = "12345"
 users = {}
 
-def signal():
+def aviator_signal():
     entree = round(random.uniform(1.20,1.70),2)
     cashout = round(random.uniform(2.00,3.50),2)
     wait = random.randint(6,12)
 
-    msg = f"""
+    return f"""
 🚀 SIGNAL AVIATOR
 
 🎯 Entrée : {entree}x
@@ -27,8 +25,6 @@ def signal():
 ⚡ Parier maintenant
 """
 
-    return msg
-
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -37,7 +33,7 @@ def start(message):
 
     bot.send_message(
         message.chat.id,
-        "🔐 Accès privé\n\nEntre ton code pour utiliser le bot."
+        "🔐 Entrez le code d'accès pour utiliser le bot."
     )
 
 
@@ -46,14 +42,14 @@ def login(message):
 
     chat = message.chat.id
 
-    if users.get(chat) == True:
+    if users.get(chat):
 
         if message.text == "Next Signal":
 
-            bot.send_message(chat,"⏳ Analyse en cours...")
+            bot.send_message(chat,"⏳ Analyse...")
             time.sleep(2)
 
-            bot.send_message(chat, signal())
+            bot.send_message(chat, aviator_signal())
 
         return
 
@@ -62,20 +58,20 @@ def login(message):
 
         users[chat] = True
 
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("Next Signal")
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        keyboard.add("Next Signal")
 
         bot.send_message(
             chat,
-            "✅ Accès autorisé\n\nClique sur Next Signal pour recevoir une prédiction.",
-            reply_markup=markup
+            "✅ Accès autorisé",
+            reply_markup=keyboard
         )
 
     else:
 
-        bot.send_message(chat,"❌ Code incorrect.")
+        bot.send_message(chat,"❌ Code incorrect")
 
 
-print("BOT STARTED")
+print("Bot started...")
 
 bot.infinity_polling()
