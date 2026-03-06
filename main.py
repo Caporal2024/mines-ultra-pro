@@ -7,7 +7,7 @@ bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "🚀 Bot Aviator en ligne !")
+    bot.send_message(message.chat.id, "🤖 Bot actif ! Bienvenue.")
 
 print("Bot démarré...")
 bot.infinity_polling()
