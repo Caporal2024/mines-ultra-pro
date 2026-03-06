@@ -1,80 +1,93 @@
 import telebot
 from telebot import types
-import os
 import random
+import time
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "PUT_YOUR_TOKEN_HERE"
 
 bot = telebot.TeleBot(TOKEN)
 
-ACCESS_CODE = "CAPORAL123"
 users = {}
 
-def menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton("🔑 Login")
-    btn2 = types.KeyboardButton("🎮 Open Game")
-    btn3 = types.KeyboardButton("⏳ Next Signal")
-    btn4 = types.KeyboardButton("📊 Odds History")
-    markup.add(btn1, btn2)
-    markup.add(btn3, btn4)
-    return markup
+# Générer signal Aviator
+def aviator_signal():
 
+    entree = round(random.uniform(1.20,1.70),2)
+    cashout = round(random.uniform(2.00,3.50),2)
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(
-        message.chat.id,
-        "🚀 Bienvenue dans le BOT SIGNAL AVIATOR\n\n🔐 Clique sur Login pour accéder.",
-        reply_markup=menu()
-    )
-
-
-@bot.message_handler(func=lambda message: message.text == "🔑 Login")
-def login(message):
-    bot.send_message(message.chat.id, "🔑 Envoie le code d'accès.")
-
-
-@bot.message_handler(func=lambda message: message.text == ACCESS_CODE)
-def access_granted(message):
-    users[message.chat.id] = True
-    bot.send_message(message.chat.id, "✅ Accès autorisé. Les signaux sont débloqués.")
-
-
-@bot.message_handler(func=lambda message: message.text == "⏳ Next Signal")
-def signal(message):
-
-    if users.get(message.chat.id) != True:
-        bot.send_message(message.chat.id, "❌ Accès refusé. Clique sur Login.")
-        return
-
-    entree = round(random.uniform(1.20, 1.60), 2)
-    cashout = round(random.uniform(2.00, 3.50), 2)
-    attendre = random.randint(5, 12)
-
-    msg = f"""
+    return f"""
 🚀 SIGNAL AVIATOR
 
 🎯 Entrée : {entree}x
 💰 Cashout : {cashout}x
-
-⏱ Attendre : {attendre}s
-⚡ Parier maintenant
 """
 
-    bot.send_message(message.chat.id, msg)
+# START
+@bot.message_handler(commands=['start'])
+def start(message):
+
+    users[message.chat.id] = False
+
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add("🔑 Login")
+    keyboard.add("🚀 Next Signal")
+
+    bot.send_message(
+        message.chat.id,
+        "Bienvenue dans le bot Aviator",
+        reply_markup=keyboard
+    )
 
 
-@bot.message_handler(func=lambda message: message.text == "🎮 Open Game")
-def open_game(message):
-    bot.send_message(message.chat.id, "🎮 https://spribe.co/games/aviator")
+# Messages
+@bot.message_handler(func=lambda message: True)
+def messages(message):
+
+    chat = message.chat.id
+
+    # LOGIN
+    if message.text == "🔑 Login":
+
+        bot.send_message(
+            chat,
+            "🆔 Envoie ton Player ID pour activer le bot."
+        )
+
+        users[chat] = "waiting_id"
+        return
 
 
-@bot.message_handler(func=lambda message: message.text == "📊 Odds History")
-def history(message):
-    bot.send_message(message.chat.id, "📊 Fonction historique bientôt disponible.")
+    # Player ID
+    if users.get(chat) == "waiting_id":
+
+        users[chat] = True
+
+        bot.send_message(
+            chat,
+            "✅ Player ID enregistré.\nTu peux maintenant recevoir les signaux."
+        )
+
+        return
 
 
-print("Bot Aviator lancé")
+    # SIGNAL
+    if message.text == "🚀 Next Signal":
+
+        if users.get(chat) != True:
+
+            bot.send_message(
+                chat,
+                "⚠️ Tu dois d'abord envoyer ton Player ID avec 🔑 Login."
+            )
+
+            return
+
+        bot.send_message(chat,"⏳ Analyse du signal...")
+        time.sleep(2)
+
+        bot.send_message(chat, aviator_signal())
+
+
+print("Bot lancé")
 
 bot.infinity_polling()
