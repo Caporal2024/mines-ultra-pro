@@ -1,12 +1,13 @@
+import os
 import telebot
 
-TOKEN = "TON_TOKEN_ICI"
+TOKEN = os.getenv("TOKEN")
 
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "✅ Bot démarré avec succès !")
+    bot.send_message(message.chat.id, "🤖 Bot CaporalPCS actif !")
 
-print("Bot en marche...")
+print("Bot démarré...")
 bot.infinity_polling()
