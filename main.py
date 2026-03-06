@@ -3,6 +3,7 @@ from telebot import types
 import os
 import random
 import time
+from datetime import datetime, timedelta
 
 TOKEN = os.getenv("TOKEN")
 
@@ -73,7 +74,7 @@ def save_player(message):
     bot.send_message(message.chat.id,"✅ Player ID enregistré")
 
 
-# 🚀 SIGNAL AVIATOR LIVE
+# 🚀 SIGNAL AVIATOR AVEC HEURE
 @bot.message_handler(func=lambda m: m.text == "🚀 Start Signal")
 def aviator_live(message):
 
@@ -84,13 +85,29 @@ def aviator_live(message):
     # 📉 Cotes réduites
     crash = round(random.uniform(1.40,3.50),2)
 
+    # 🕒 heure du signal
+    signal_time = datetime.now() + timedelta(seconds=10)
+    heure = signal_time.strftime("%H:%M:%S")
+
+    bot.send_message(message.chat.id,
+f"""
+🚀 SIGNAL AVIATOR
+
+🕒 Heure : {heure}
+🎯 Entrée : 1.20x
+💰 Cashout conseillé : {crash}x
+
+Préparez votre mise...
+""")
+
+    time.sleep(10)
+
     msg = bot.send_message(message.chat.id,"🚀 AVIATOR LIVE\n\n1.00x")
 
     multiplier = 1.00
 
     while multiplier < crash:
 
-        # ⚡ live rapide
         time.sleep(0.4)
 
         multiplier += round(random.uniform(0.10,0.35),2)
@@ -110,7 +127,6 @@ def aviator_live(message):
 
 Final : {crash}x
 
-💰 Cashout conseillé avant crash
 CAPORAL PCS SIGNAL
 """,
         message.chat.id,
